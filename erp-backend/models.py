@@ -1,17 +1,67 @@
 from extensions import db
-from datetime import datetime
-from sqlalchemy import or_
- 
-class ClassMaster(db.Model):
+from datetime import datetime, date
+from decimal import Decimal
+from sqlalchemy import or_, event
+from sqlalchemy.orm import declared_attr
+from sqlalchemy import inspect
+from flask import g, has_request_context, request
+
+
+
+class AuditLog(db.Model):
+    __tablename__ = "audit_logs"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+
+    table_name = db.Column(db.String(100), nullable=False)
+    record_id = db.Column(db.String(100), nullable=True)
+
+    module = db.Column(db.String(50), nullable=True)
+
+    action = db.Column(db.String(20), nullable=False)
+
+    old_data = db.Column(db.JSON, nullable=True)
+    new_data = db.Column(db.JSON, nullable=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=True)
+    ip_address = db.Column(db.String(50), nullable=True)
+
+    timestamp = db.Column(db.DateTime, nullable=False)
+
+    __table_args__ = (
+        db.Index("idx_audit_table_record", "table_name", "record_id"),
+        db.Index("idx_audit_user", "user_id"),
+        db.Index("idx_audit_timestamp", "timestamp"),
+    )
+    
+class AuditMixin(object):
+    """
+    Mixin to add created_at, updated_at, created_by, updated_by to all tables.
+    """
+    __audit_module__ = "GENERAL"
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    @declared_attr
+    def created_by(cls):
+        return db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=True)
+
+    @declared_attr
+    def updated_by(cls):
+        return db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=True)
+
+class ClassMaster(db.Model, AuditMixin):
     __tablename__ = "classes"
+    __audit_module__ = "ACADEMICS"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     class_name = db.Column(db.String(50), unique=True, nullable=False)
     location = db.Column(db.String(50), default="Hyderabad")
     branch = db.Column(db.String(50), default="All")
 
 
-class ClassSection(db.Model):
+class ClassSection(db.Model, AuditMixin):
     __tablename__ = "class_sections"
+    __audit_module__ = "ACADEMICS"
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -37,9 +87,6 @@ class ClassSection(db.Model):
 
     is_active = db.Column(db.Boolean, default=True)
 
-    created_at = db.Column(db.DateTime, default=db.func.now())
-    updated_at = db.Column(db.DateTime, onupdate=db.func.now())
-
     __table_args__ = (
         db.UniqueConstraint(
             "class_id",
@@ -55,8 +102,9 @@ class ClassSection(db.Model):
 
 
 
-class User(db.Model):
+class User(db.Model, AuditMixin):
     __tablename__ = "users"
+    __audit_module__ = "SYSTEM"
     user_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     password = db.Column(db.String(50), nullable=False)
@@ -65,8 +113,9 @@ class User(db.Model):
     location = db.Column(db.String(50), default="Hyderabad")
 
 
-class Student(db.Model):
+class Student(db.Model, AuditMixin):
     __tablename__ = "students"
+    __audit_module__ = "STUDENT"
     student_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     
     # Basic Information
@@ -178,8 +227,9 @@ class Student(db.Model):
     )
 
 
-class FeeType(db.Model):
+class FeeType(db.Model, AuditMixin):
     __tablename__ = "feetypes"
+    __audit_module__ = "FEES"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     feetype = db.Column(db.String(100), nullable=False)
     category = db.Column(db.String(50))
@@ -188,7 +238,6 @@ class FeeType(db.Model):
     displayname = db.Column(db.String(100))
     isrefundable = db.Column(db.Boolean, default=False)
     description = db.Column(db.String(255))
-    createdat = db.Column(db.DateTime, default=datetime.now)
     
     # Branch and Year Segregation
     branch = db.Column(db.String(50))
@@ -196,8 +245,9 @@ class FeeType(db.Model):
     academic_year = db.Column(db.String(20))
 
 
-class StudentFee(db.Model):
+class StudentFee(db.Model, AuditMixin):
     __tablename__ = "studentfees"
+    __audit_module__ = "FEES"
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey("students.student_id"))
     fee_id = db.Column(db.Integer, nullable=True)  # Added to match DB schema
@@ -218,8 +268,9 @@ class StudentFee(db.Model):
     student = db.relationship("Student")
 
 
-class ClassFeeStructure(db.Model):
+class ClassFeeStructure(db.Model, AuditMixin):
     __tablename__ = "classfeestructure"
+    __audit_module__ = "FEES"
     id = db.Column(db.Integer, primary_key=True)
     clazz = db.Column("class", db.String(50))
     feetypeid = db.Column(db.Integer, db.ForeignKey("feetypes.id"))
@@ -229,7 +280,6 @@ class ClassFeeStructure(db.Model):
     installments_count = db.Column(db.Integer, default=0)
     isnewadmission = db.Column(db.Boolean, default=False)
     feegroup = db.Column(db.String(50))
-    createdat = db.Column(db.DateTime, default=datetime.now)
     feetype = db.relationship("FeeType")
 
     # Branch and Year Segregation
@@ -238,8 +288,9 @@ class ClassFeeStructure(db.Model):
     academic_year = db.Column(db.String(20))
 
 
-class Concession(db.Model):
+class Concession(db.Model, AuditMixin):
     __tablename__ = "concessions"
+    __audit_module__ = "FEES"
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100)) # e.g., "Sibling Discount"
     description = db.Column(db.String(255))
@@ -250,13 +301,13 @@ class Concession(db.Model):
     percentage = db.Column(db.Numeric(5, 2)) # The value, e.g., 50.00
     is_percentage = db.Column(db.Boolean, default=True) # Flag: True=%, False=Flat Amount
     show_in_payment = db.Column(db.Boolean, default=False) # Flag: Show in Fee Payment dropdown
-    created_at = db.Column(db.DateTime, default=datetime.now)
     
     fee_type = db.relationship("FeeType")
 
 
-class FeeInstallment(db.Model):
+class FeeInstallment(db.Model, AuditMixin):
     __tablename__ = "fee_installments"
+    __audit_module__ = "FEES"
     id = db.Column(db.Integer, primary_key=True)
     installment_no = db.Column(db.Integer, nullable=False)
     title = db.Column(db.String(100), nullable=False)
@@ -265,7 +316,6 @@ class FeeInstallment(db.Model):
     last_pay_date = db.Column(db.Date, nullable=False)
     is_admission = db.Column(db.Boolean, default=False)
     description = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.now)
     fee_type_id = db.Column(db.Integer, db.ForeignKey("feetypes.id"), nullable=True)
     location = db.Column(db.String(50), default="Hyderabad")
     branch = db.Column(db.String(50))
@@ -274,9 +324,10 @@ class FeeInstallment(db.Model):
     fee_type = db.relationship("FeeType")
 
 
-class FeePayment(db.Model):
+class FeePayment(db.Model, AuditMixin):
     # STEP 2: FINAL fee_payments TABLE
     __tablename__ = "fee_payments"
+    __audit_module__ = "FEES"
     id = db.Column("payment_id", db.Integer, primary_key=True, autoincrement=True)
 
     # Receipt - Not strict unique to allow line items per receipt (One receipt = Multiple Fee Rows)
@@ -315,7 +366,6 @@ class FeePayment(db.Model):
     TransactionDetails=db.Column(db.String(100))
     collected_by = db.Column(db.Integer) # User ID
     collected_by_name = db.Column(db.String(100)) # User Name (Added per request)
-    created_at = db.Column(db.DateTime, default=datetime.now)
 
     status = db.Column(db.Enum("A", "I"), default="A") # A=Active, I=Inactive (Cancelled)
     cancel_reason = db.Column(db.String(255)) # Reason for cancellation
@@ -328,43 +378,58 @@ class FeePayment(db.Model):
 # BRANCH & ORGANIZATION MANAGEMENT (PHASE 1)
 # ----------------------------------------------------------
 
-class OrgMaster(db.Model):
+class OrgMaster(db.Model, AuditMixin):
     __tablename__ = "org_master"
+    __audit_module__ = "SYSTEM"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     master_type = db.Column(db.Enum('LOCATION', 'ACADEMIC_YEAR'), nullable=False)
     code = db.Column(db.String(50), nullable=False)
     display_name = db.Column(db.String(100), nullable=False)
     is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.now)
     __table_args__ = (db.UniqueConstraint('master_type', 'code', name='_master_type_code_uc'),)
 
-class Branch(db.Model):
+class Branch(db.Model, AuditMixin):
     __tablename__ = "branches"
+    __audit_module__ = "SYSTEM"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     branch_code = db.Column(db.String(50), unique=True, nullable=False)
     branch_name = db.Column(db.String(100), nullable=False)
     location_code = db.Column(db.String(50)) # refers to org_master.code
     is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.now)
 
-class UserBranchAccess(db.Model):
+class UserBranchAccess(db.Model, AuditMixin):
     __tablename__ = "user_branch_access"
+    __audit_module__ = "SYSTEM"
+
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+
     user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
     branch_id = db.Column(db.Integer, db.ForeignKey("branches.id"), nullable=False)
+
     start_date = db.Column(db.Date, nullable=False)
-    end_date = db.Column(db.Date, nullable=True) # NULL = Permanent
+    end_date = db.Column(db.Date, nullable=True)  # NULL = Permanent
     is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    
-    __table_args__ = (db.UniqueConstraint('user_id', 'branch_id', 'start_date', name='_user_branch_start_uc'),)
-    
-    branch = db.relationship("Branch")
-    user = db.relationship("User")
 
+    __table_args__ = (
+        db.UniqueConstraint(
+            'user_id', 
+            'branch_id', 
+            'start_date', 
+            name='_user_branch_start_uc'
+        ),
+    )
 
-class BranchYearSequence(db.Model):
+    # Relationships
+    branch = db.relationship("Branch", foreign_keys=[branch_id])
+
+    user = db.relationship(
+        "User",
+        foreign_keys=[user_id]
+    )
+
+class BranchYearSequence(db.Model, AuditMixin):
     __tablename__ = "enrollment_sequences"
+    __audit_module__ = "SYSTEM"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     branch_id = db.Column(db.Integer, db.ForeignKey("branches.id"), nullable=False)
     academic_year_id = db.Column(db.Integer, db.ForeignKey("org_master.id"), nullable=False)
@@ -374,11 +439,6 @@ class BranchYearSequence(db.Model):
     
     receipt_prefix = db.Column(db.String(20), nullable=False)
     last_receipt_no = db.Column(db.Integer, default=0, nullable=False)
-    
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
-    created_by = db.Column(db.Integer) # User ID
-    updated_by = db.Column(db.Integer) # User ID
 
     __table_args__ = (
         db.UniqueConstraint('branch_id', 'academic_year_id', name='uq_branch_year_sequence'),
@@ -387,8 +447,9 @@ class BranchYearSequence(db.Model):
     )
 
 
-class StudentAcademicRecord(db.Model):
+class StudentAcademicRecord(db.Model, AuditMixin):
     __tablename__ = "student_academic_records"
+    __audit_module__ = "STUDENT"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     student_id = db.Column(db.Integer, db.ForeignKey("students.student_id"), nullable=False)
     academic_year = db.Column(db.String(20), nullable=False)
@@ -397,7 +458,6 @@ class StudentAcademicRecord(db.Model):
     roll_number = db.Column(db.Integer)
     is_promoted = db.Column(db.Boolean, default=False)
     promoted_date = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=datetime.now)
     
     student = db.relationship("Student", backref=db.backref("academic_records", lazy=True))
 
@@ -407,16 +467,15 @@ class StudentAcademicRecord(db.Model):
 # ATTENDANCE MODEL
 # ----------------------------------------------------------
 
-class Attendance(db.Model):
+class Attendance(db.Model, AuditMixin):
     __tablename__ = "attendance"
+    __audit_module__ = "ATTENDANCE"
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey("students.student_id"), nullable=False)
     date = db.Column(db.Date, nullable=False)
     status = db.Column(db.Enum("Present", "Absent", name="attendance_status"), default="Present")
     remarks = db.Column(db.String(255))
     update_count = db.Column(db.Integer, default=0)
-    updated_at = db.Column(db.DateTime, default=datetime.now)
-    created_at = db.Column(db.DateTime, default=datetime.now)
     
     student = db.relationship("Student")
     
@@ -432,8 +491,9 @@ class Attendance(db.Model):
 # WEEKLY OFF & HOLIDAY CALENDAR
 # ----------------------------------------------------------
 
-class WeeklyOffRule(db.Model):
+class WeeklyOffRule(db.Model, AuditMixin):
     __tablename__ = "weekly_off_rule"
+    __audit_module__ = "ATTENDANCE"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
 
@@ -446,7 +506,6 @@ class WeeklyOffRule(db.Model):
     academic_year = db.Column(db.String(20), nullable=False)
 
     active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.now)
 
     __table_args__ = (
         db.UniqueConstraint('branch_id', 'class_id', 'weekday', 'week_number', 'academic_year',
@@ -456,8 +515,9 @@ class WeeklyOffRule(db.Model):
     )
 
 
-class HolidayCalendar(db.Model):
+class HolidayCalendar(db.Model, AuditMixin):
     __tablename__ = "holiday_calendar"
+    __audit_module__ = "ATTENDANCE"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
 
@@ -481,7 +541,6 @@ class HolidayCalendar(db.Model):
     academic_year = db.Column(db.String(20), nullable=False)
 
     active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.now)
 
     __table_args__ = (
         db.CheckConstraint('start_date <= end_date', name='chk_holiday_date_range'),
@@ -492,16 +551,18 @@ class HolidayCalendar(db.Model):
 # ----------------------------------------------------------
 #  Subject Master Model
 # ----------------------------------------------------------
-class SubjectMaster(db.Model):
+class SubjectMaster(db.Model, AuditMixin):
     __tablename__ = "subjectmaster"
+    __audit_module__ = "ACADEMICS"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     subject_name = db.Column(db.String(100), nullable=False)
     subject_type = db.Column(db.Enum('Hifz', 'Academic'), default='Academic')
     academic_year = db.Column(db.String(20)) # New: Scope to year
     is_active = db.Column(db.Boolean, default=True) # New: Active Status
 
-class ClassSubjectAssignment(db.Model):
+class ClassSubjectAssignment(db.Model, AuditMixin):
     __tablename__ = "classsubjectassignment"
+    __audit_module__ = "ACADEMICS"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     class_id = db.Column(db.Integer, nullable=False) # Maps to classid
     subject_id = db.Column(db.Integer, nullable=False) # Maps to subjectid
@@ -513,8 +574,9 @@ class ClassSubjectAssignment(db.Model):
         db.UniqueConstraint('class_id', 'subject_id', 'academic_year', 'location_name', 'branch_name', name='uq_classsubject_context'),
     )
 
-class StudentSubjectAssignment(db.Model):
+class StudentSubjectAssignment(db.Model, AuditMixin):
     __tablename__ = "studentsubjectassignment"
+    __audit_module__ = "ACADEMICS"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     student_id = db.Column(db.Integer, db.ForeignKey("students.student_id"), nullable=False)
     subject_id = db.Column(db.Integer, db.ForeignKey("subjectmaster.id"), nullable=False)
@@ -527,8 +589,9 @@ class StudentSubjectAssignment(db.Model):
     )
 
 
-class TestType(db.Model):
+class TestType(db.Model, AuditMixin):
     __tablename__ = "testtype"
+    __audit_module__ = "ACADEMICS"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     test_name = db.Column(db.String(100), nullable=False)
@@ -539,16 +602,11 @@ class TestType(db.Model):
 
     is_active = db.Column(db.Boolean, default=True)
 
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
-
-    created_by = db.Column(db.Integer)
-    updated_by = db.Column(db.Integer)
 
 
-
-class TestAttendanceMonth(db.Model):
+class TestAttendanceMonth(db.Model, AuditMixin):
     __tablename__ = "test_attendance_months"
+    __audit_module__ = "ACADEMICS"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     test_id = db.Column(db.Integer, db.ForeignKey("testtype.id"), nullable=False)
     
@@ -568,8 +626,9 @@ class TestAttendanceMonth(db.Model):
     )
 
 
-class ClassTest(db.Model):
+class ClassTest(db.Model, AuditMixin):
     __tablename__ = "class_test"
+    __audit_module__ = "ACADEMICS"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
 
     academic_year = db.Column(db.String(50), nullable=False)
@@ -583,37 +642,28 @@ class ClassTest(db.Model):
 
     status = db.Column(db.Boolean, default=True)
 
-    created_by = db.Column(db.Integer, nullable=False)
-    updated_by = db.Column(db.Integer, default=None)
-
-    created_at = db.Column(db.TIMESTAMP, default=datetime.utcnow)
-    updated_at = db.Column(db.TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
-
     __table_args__ = (
         db.UniqueConstraint('academic_year', 'branch', 'class_id', 'test_id', name='uniq_class_test'),
         db.UniqueConstraint('academic_year', 'branch', 'class_id', 'test_order', name='uniq_test_order')
     )
 
-class ClassTestSubject(db.Model):
+class ClassTestSubject(db.Model, AuditMixin):
     __tablename__ = "class_test_subjects"
+    __audit_module__ = "ACADEMICS"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     class_test_id = db.Column(db.Integer, db.ForeignKey("class_test.id"), nullable=False)
     subject_id = db.Column(db.Integer, db.ForeignKey("subjectmaster.id"), nullable=False)
     max_marks = db.Column(db.Integer, nullable=False)
     subject_order = db.Column(db.Integer, nullable=False)
-    
-    created_by = db.Column(db.Integer, nullable=False)
-    updated_by = db.Column(db.Integer)
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
     __table_args__ = (
         db.UniqueConstraint('class_test_id', 'subject_id', name='uniq_class_test_subject'),
         db.UniqueConstraint('class_test_id', 'subject_order', name='uniq_subject_order_per_test')
     )
 
-class StudentTestAssignment(db.Model):
+class StudentTestAssignment(db.Model, AuditMixin):
     __tablename__ = "student_test_assignments"
+    __audit_module__ = "ACADEMICS"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     student_id = db.Column(db.Integer, db.ForeignKey("students.student_id"), nullable=False)
     class_test_id = db.Column(db.Integer, db.ForeignKey("class_test.id"), nullable=False)
@@ -624,18 +674,14 @@ class StudentTestAssignment(db.Model):
     
     status = db.Column(db.Boolean, default=True) # True=Assigned, False=Unassigned
 
-    created_by = db.Column(db.Integer)
-    updated_by = db.Column(db.Integer)
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
-
     __table_args__ = (
         db.UniqueConstraint('student_id', 'class_test_id', name='uniq_student_test_assign'),
     )
 
 
-class GradeScale(db.Model):
+class GradeScale(db.Model, AuditMixin):
     __tablename__ = "grade_scales"
+    __audit_module__ = "ACADEMICS"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
 
     scale_name = db.Column(db.String(100), nullable=False)
@@ -650,15 +696,13 @@ class GradeScale(db.Model):
 
     is_active = db.Column(db.Boolean, default=True)
 
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
-
     __table_args__ = (
         db.UniqueConstraint('scale_name', 'academic_year', 'branch', 'total_marks', name='uq_grade_scale_context'),
     )
 
-class GradeScaleDetails(db.Model):
+class GradeScaleDetails(db.Model, AuditMixin):
     __tablename__ = "grade_scale_details"
+    __audit_module__ = "ACADEMICS"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
 
     grade_scale_id = db.Column(db.Integer, db.ForeignKey('grade_scales.id', ondelete="CASCADE"), nullable=False)
@@ -669,9 +713,6 @@ class GradeScaleDetails(db.Model):
     description = db.Column(db.String(255)) # Added per user request
 
     is_active = db.Column(db.Boolean, default=True)
-
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
     
     grade_scale = db.relationship("GradeScale", backref=db.backref("details", cascade="all, delete-orphan"))
 
@@ -681,8 +722,9 @@ class GradeScaleDetails(db.Model):
     )
 
 
-class StudentMarks(db.Model):
+class StudentMarks(db.Model, AuditMixin):
     __tablename__ = "student_marks"
+    __audit_module__ = "ACADEMICS"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
 
     student_id = db.Column(db.Integer, db.ForeignKey("students.student_id"), nullable=False)
@@ -698,12 +740,6 @@ class StudentMarks(db.Model):
     class_id = db.Column(db.Integer, nullable=False)
     section = db.Column(db.String(20))
 
-    created_at = db.Column(db.TIMESTAMP, default=datetime.utcnow)
-    updated_at = db.Column(db.TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    created_by = db.Column(db.Integer)
-    updated_by = db.Column(db.Integer)
-
     # Relationships
     student = db.relationship("Student")
     class_test = db.relationship("ClassTest")
@@ -716,19 +752,19 @@ class StudentMarks(db.Model):
     )
 
 
-class DocumentType(db.Model):
+class DocumentType(db.Model, AuditMixin):
     __tablename__ = "document_types"
+    __audit_module__ = "STUDENT"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     code = db.Column(db.String(50), unique=True, nullable=False)
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.String(255))
     is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
 
-class StudentDocument(db.Model):
+class StudentDocument(db.Model, AuditMixin):
     __tablename__ = "student_documents"
+    __audit_module__ = "STUDENT"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     student_id = db.Column(db.Integer, db.ForeignKey('students.student_id', ondelete='CASCADE'), nullable=False)
     document_type_id = db.Column(db.Integer, db.ForeignKey('document_types.id', ondelete='RESTRICT'), nullable=False)
@@ -740,15 +776,210 @@ class StudentDocument(db.Model):
     file_path = db.Column(db.String(500))
     file_size = db.Column(db.Integer)
     mime_type = db.Column(db.String(100))
-    uploaded_at = db.Column(db.DateTime, default=datetime.now)
-    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.user_id', ondelete='SET NULL'))
     is_verified = db.Column(db.Boolean, default=False)
     verified_by = db.Column(db.Integer)
     verified_at = db.Column(db.DateTime)
     document_type = db.relationship("DocumentType")
     student = db.relationship("Student")
-    uploader = db.relationship("User", foreign_keys=[uploaded_by])
 
     __table_args__ = (
         db.UniqueConstraint('student_id', 'document_type_id', name='uq_student_doc_type'),
     )
+
+
+# ----------------------------------------------------------
+# GLOBAL AUDIT EVENT LISTENERS
+# ----------------------------------------------------------
+
+VALID_AUDIT_ACTIONS = {
+    "CREATE",
+    "UPDATE",
+    "DELETE",
+    "SOFT_DELETE",
+    "LOGIN",
+    "LOGOUT"
+}
+
+@event.listens_for(db.session, "before_flush")
+def receive_before_flush(session, flush_context, instances):
+
+    # Only run inside request context
+    if not has_request_context():
+        return
+
+    user_id = getattr(g, "user_id", None)
+
+    # Nginx-safe IP detection
+    ip_address = request.headers.get(
+        "X-Forwarded-For",
+        request.remote_addr
+    )
+
+    # -------------------------
+    # HELPER: Get Primary Key
+    # -------------------------
+    def get_record_id(obj):
+        state = inspect(obj)
+        pk = state.identity
+        return str(pk[0]) if pk else None
+
+    # -------------------------
+    # HELPER: Make JSON-safe
+    # -------------------------
+    def _make_serializable(val):
+        if isinstance(val, datetime):
+            return val.isoformat()
+        if isinstance(val, date):
+            return val.isoformat()
+        if isinstance(val, Decimal):
+            return float(val)
+        return val
+
+    # =========================================================
+    # AUTO-FILL created_by / updated_by on NEW objects
+    # =========================================================
+    for obj in session.new:
+        if isinstance(obj, AuditMixin) and not isinstance(obj, AuditLog):
+            if user_id is not None:
+                if obj.created_by is None:
+                    obj.created_by = user_id
+                obj.updated_by = user_id
+            now = datetime.utcnow()
+            if obj.created_at is None:
+                obj.created_at = now
+            obj.updated_at = now
+
+    # =========================================================
+    # AUTO-FILL updated_by on DIRTY objects
+    # =========================================================
+    for obj in session.dirty:
+        if isinstance(obj, AuditMixin) and not isinstance(obj, AuditLog):
+            if user_id is not None:
+                obj.updated_by = user_id
+            obj.updated_at = datetime.utcnow()
+
+    # =========================================================
+    # INSERT
+    # =========================================================
+    for obj in session.new:
+
+        if not isinstance(obj, AuditMixin) or isinstance(obj, AuditLog):
+            continue
+
+        if obj.__tablename__ == "audit_logs":
+            continue
+
+        new_data = {}
+        for col in obj.__table__.columns:
+            try:
+                value = getattr(obj, col.name)
+                new_data[col.name] = _make_serializable(value)
+            except Exception:
+                new_data[col.name] = None
+        
+        module = getattr(obj, "__audit_module__", "GENERAL")
+        action = "CREATE"
+        if action not in VALID_AUDIT_ACTIONS:
+            continue
+
+        log = AuditLog(
+            table_name=obj.__tablename__,
+            record_id=None,  # PK may not exist yet (before flush)
+            module=module,
+            action=action,
+            old_data=None,
+            new_data=new_data,
+            user_id=user_id,
+            ip_address=ip_address,
+            timestamp=datetime.utcnow()
+        )
+
+        session.add(log)
+
+    # =========================================================
+    # UPDATE
+    # =========================================================
+    for obj in session.dirty:
+
+        if not isinstance(obj, AuditMixin) or isinstance(obj, AuditLog):
+            continue
+
+        if obj.__tablename__ == "audit_logs":
+            continue
+
+        if not session.is_modified(obj, include_collections=False):
+            continue
+
+        state = inspect(obj)
+
+        old_data = {}
+        new_data = {}
+
+        for attr in state.attrs:
+            hist = attr.history
+
+            if not hist.has_changes():
+                continue
+
+            old_value = hist.deleted[0] if hist.deleted else None
+            new_value = hist.added[0] if hist.added else None
+
+            old_data[attr.key] = _make_serializable(old_value)
+            new_data[attr.key] = _make_serializable(new_value)
+
+        if old_data:
+            module = getattr(obj, "__audit_module__", "GENERAL")
+            action = "UPDATE"
+            if action not in VALID_AUDIT_ACTIONS:
+                continue
+
+            log = AuditLog(
+                table_name=obj.__tablename__,
+                record_id=get_record_id(obj),
+                module=module,
+                action=action,
+                old_data=old_data,
+                new_data=new_data,
+                user_id=user_id,
+                ip_address=ip_address,
+                timestamp=datetime.utcnow()
+            )
+
+            session.add(log)
+
+    # =========================================================
+    # DELETE
+    # =========================================================
+    for obj in session.deleted:
+
+        if not isinstance(obj, AuditMixin) or isinstance(obj, AuditLog):
+            continue
+
+        if obj.__tablename__ == "audit_logs":
+            continue
+
+        old_data = {}
+        for col in obj.__table__.columns:
+            try:
+                old_data[col.name] = _make_serializable(getattr(obj, col.name))
+            except Exception:
+                old_data[col.name] = None
+                
+        module = getattr(obj, "__audit_module__", "GENERAL")
+        action = "DELETE"
+        if action not in VALID_AUDIT_ACTIONS:
+            continue
+
+        log = AuditLog(
+            table_name=obj.__tablename__,
+            record_id=get_record_id(obj),
+            module=module,
+            action=action,
+            old_data=old_data,
+            new_data=None,
+            user_id=user_id,
+            ip_address=ip_address,
+            timestamp=datetime.utcnow()
+        )
+
+        session.add(log)

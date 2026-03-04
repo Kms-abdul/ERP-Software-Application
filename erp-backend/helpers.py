@@ -21,6 +21,8 @@ def get_default_location():
         return "Hyderabad"
 
 
+from flask import g
+
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -38,6 +40,9 @@ def token_required(f):
             current_user = User.query.filter_by(user_id=data['user_id']).first()
             if not current_user:
                  return jsonify({'error': 'User invalid!'}), 401
+                 
+            # Store user_id in global context for AuditMixin event listener
+            g.user_id = current_user.user_id
         except jwt.ExpiredSignatureError:
             return jsonify({'error': 'Token has expired!'}), 401
         except Exception as e:

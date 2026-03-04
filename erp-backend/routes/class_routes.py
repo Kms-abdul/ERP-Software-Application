@@ -8,7 +8,8 @@ from helpers import token_required
 bp = Blueprint("class_routes", __name__)
 
 @bp.route("/api/classes/create_with_sections", methods=["POST"])
-def create_class_with_sections():
+@token_required
+def create_class_with_sections(current_user):
     """
     Creates or Updates a Class + Sections.
     Strictly transactional.
@@ -38,7 +39,7 @@ def create_class_with_sections():
         class_name = class_name_raw.strip() # Could add .title() if desired
 
         # Start Transaction
-        with db.session.begin():
+        with db.session.begin_nested():
             # 2. Find or Create ClassMaster
             class_obj = ClassMaster.query.filter(
                 func.lower(ClassMaster.class_name) == func.lower(class_name)
@@ -150,6 +151,7 @@ def create_class_with_sections():
                     )
                     db.session.add(new_sec)
 
+        db.session.commit()
         return jsonify({"message": "Class and sections saved successfully"}), 201
 
 
@@ -159,8 +161,14 @@ def create_class_with_sections():
         # So we just catch and return.
         return jsonify({"error": str(e)}), 400
     except IntegrityError as e:
+        import traceback
+        traceback.print_exc()
+        db.session.rollback()
         return jsonify({"error": "Database integrity error (duplicate or invalid key)"}), 409
     except Exception as e:
+        import traceback
+        traceback.print_exc()
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/classes/copy_structure", methods=["POST"])
