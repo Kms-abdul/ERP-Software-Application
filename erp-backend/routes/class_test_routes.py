@@ -3,23 +3,10 @@ from extensions import db
 from models import ClassTest, ClassMaster, TestType, OrgMaster, Branch, User, ClassTestSubject, SubjectMaster
 import sqlalchemy
 from datetime import datetime
-import jwt
+from helpers import token_required
  
 class_test_bp = Blueprint('class_test_bp', __name__)
-def get_current_user_id():
-    token = None
-    if 'Authorization' in request.headers:
-        auth_header = request.headers['Authorization']
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
-    
-    if token:
-        try:
-            data = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=["HS256"])
-            return data['user_id']
-        except:
-            pass
-    return 1 # Default or error
+
 
 @class_test_bp.route('/matrix', methods=['GET'])
 def get_matrix():
@@ -61,7 +48,8 @@ def get_matrix():
         return jsonify({'error': str(e)}), 500
 
 @class_test_bp.route('/assign', methods=['POST'])
-def assign_test():
+@token_required
+def assign_test(current_user):
     try:
         data = request.json
         academic_year = data.get('academic_year')
@@ -72,7 +60,7 @@ def assign_test():
         test_order = data.get('test_order')
         status = data.get('status', True) # True = Add/Update, False=Delete
 
-        user_id = get_current_user_id()
+
 
         # 1. Resolve Location Strictly
         resolved_location = "Hyderabad" # Default
@@ -107,7 +95,6 @@ def assign_test():
         if status:
             if existing:
                 existing.test_order = test_order
-                existing.updated_by = user_id
                 existing.status = True
                 existing.location = resolved_location # ENFORCE standard location
             else:
@@ -118,8 +105,7 @@ def assign_test():
                     class_id=class_id,
                     test_id=test_id,
                     test_order=test_order,
-                    status=True,
-                    created_by=user_id
+                    status=True
                 )
                 db.session.add(new_assignment)
         else:
@@ -137,7 +123,8 @@ def assign_test():
         return jsonify({'error': str(e)}), 500
 
 @class_test_bp.route('/copy', methods=['POST'])
-def copy_assignments():
+@token_required
+def copy_assignments(current_user):
     try:
         data = request.json
         from_branch = data.get('from_branch')
@@ -148,7 +135,7 @@ def copy_assignments():
         if not from_branch or not to_branch or not academic_year or not to_location:
             return jsonify({'error': 'Missing required fields'}), 400
 
-        user_id = get_current_user_id()
+
 
         # Fetch source assignments
         source_assignments = ClassTest.query.filter_by(
@@ -178,8 +165,7 @@ def copy_assignments():
                     class_id=src.class_id,
                     test_id=src.test_id,
                     test_order=src.test_order,
-                    status=src.status,
-                    created_by=user_id
+                    status=src.status
                 )
                 db.session.add(new_entry)
                 count += 1

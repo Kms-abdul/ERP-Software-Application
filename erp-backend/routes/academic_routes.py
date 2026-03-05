@@ -3,10 +3,12 @@ from extensions import db
 from models import SubjectMaster, Branch, OrgMaster, ClassSubjectAssignment
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import exists
+from helpers import token_required
 
 bp = Blueprint("academic", __name__)
 @bp.route("/api/academic/subjects", methods=["POST"])
-def create_subject():
+@token_required
+def create_subject(current_user):
     try: 
         data = request.json
         print(f"[DEBUG] Received request to create subject: {data}")
@@ -97,7 +99,8 @@ def list_subjects():
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/academic/subjects/<int:subject_id>", methods=["PUT"])
-def update_subject(subject_id):
+@token_required
+def update_subject(current_user, subject_id):
     try:
         data = request.json
         if not data:
@@ -125,7 +128,8 @@ def update_subject(subject_id):
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/academic/subjects/<int:subject_id>", methods=["DELETE"])
-def delete_subject(subject_id):
+@token_required
+def delete_subject(current_user, subject_id):
     try:
         subject = SubjectMaster.query.get(subject_id)
         if not subject:
@@ -159,7 +163,8 @@ def delete_subject(subject_id):
 from models import ClassSubjectAssignment, Branch, ClassMaster, OrgMaster, Student, StudentSubjectAssignment, StudentAcademicRecord
 
 @bp.route("/api/academic/assign-subjects", methods=["POST"])
-def assign_subjects():
+@token_required
+def assign_subjects(current_user):
     try:
         data = request.json
         print(f"[DEBUG] Assign Request: {data}")
@@ -292,7 +297,8 @@ def get_assigned_subjects():
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/academic/assigned-subjects/<int:id>", methods=["DELETE"])
-def delete_assignment(id):
+@token_required
+def delete_assignment(current_user, id):
     try:
         record = ClassSubjectAssignment.query.get(id)
         if not record:
@@ -336,7 +342,8 @@ def delete_assignment(id):
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/academic/manage-subject-assignment/bulk", methods=["POST"])
-def manage_subject_assignment_bulk():
+@token_required
+def manage_subject_assignment_bulk(current_user):
     try:
         data = request.json
         updates = data.get("updates", [])
@@ -454,7 +461,8 @@ def manage_subject_assignment_bulk():
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/academic/manage-subject-assignment", methods=["POST"])
-def manage_subject_assignment():
+@token_required
+def manage_subject_assignment(current_user):
     # Deprecated/Wrapper for single update, can call bulk logic or implement similarly
     # For now implementation similar to bulk but single item
     try:
@@ -732,7 +740,8 @@ def get_assignment_data():
         return jsonify({"error": str(e), "traceback": err_msg}), 500
 
 @bp.route("/api/academics/save-student-subjects", methods=["POST"])
-def save_student_subjects():
+@token_required
+def save_student_subjects(current_user):
     try:
         data = request.json
         academic_year = data.get("academic_year")
@@ -780,7 +789,8 @@ def save_student_subjects():
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/academic/copy-subject-assignments", methods=["POST"])
-def copy_subject_assignments():
+@token_required
+def copy_subject_assignments(current_user):
     try:
         data = request.json
         source_branch_id = data.get("source_branch_id")

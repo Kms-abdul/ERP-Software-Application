@@ -12,7 +12,7 @@ from models import (
     Branch,
     OrgMaster
 )
-import jwt
+from helpers import token_required
 # -------------------------------------------------
 # Blueprint
 # -------------------------------------------------
@@ -22,32 +22,7 @@ class_test_subject_bp = Blueprint(
     url_prefix='/api/class-test-subjects'
 )
 
-# -------------------------------------------------
-# Auth Helper
-# -------------------------------------------------
-def get_current_user():
-    token = None
-    if 'Authorization' in request.headers:
-        auth_header = request.headers['Authorization']
-        if auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
 
-    # Try to decode if token exists
-    if token:
-        try:
-            data = jwt.decode(
-                token,
-                current_app.config['SECRET_KEY'],
-                algorithms=["HS256"]
-            )
-            return User.query.filter_by(user_id=data['user_id']).first()
-        except:
-            pass
-    
-    # FALLBACK: Return default ADMIN user (ID 1) if auth fails or no token
-    # This satisfies the "nothing should be unauthorized" requirement
-    # while generating valid IDs for the database audit columns.
-    return User.query.get(1)
 
 # -------------------------------------------------
 # GET : Load Matrix
@@ -160,7 +135,8 @@ def get_matrix():
 # POST : Save Assignments
 # -------------------------------------------------
 @class_test_subject_bp.route('/', methods=['POST'])
-def save_assignments():
+@token_required
+def save_assignments(current_user):
     try:
         data = request.json
         class_test_id = data.get('class_test_id')
@@ -173,14 +149,7 @@ def save_assignments():
         class_id = context.get('class_id')
         test_id = context.get('test_id')
 
-        user = get_current_user()
-        
-        # FINAL SAFETY NET: If even User ID 1 is missing from DB, create a mock object
-        # so we NEVER return 401 Unauthorized as per user request.
-        if not user:
-            class MockUser:
-                user_id = 1
-            user = MockUser()
+
 
         # 1. Resolve or Create ClassTest
         class_test = None
@@ -213,9 +182,7 @@ def save_assignments():
                     location="Hyderabad", # Default or derive
                     class_id=class_id,
                     test_id=test_id,
-                    test_order=max_order + 1,
-                    created_by=user.user_id,
-                    updated_by=user.user_id
+                    test_order=max_order + 1
                 )
                 db.session.add(class_test)
                 db.session.flush() # Get ID
@@ -268,9 +235,7 @@ def save_assignments():
                 class_test_id=class_test.id,
                 subject_id=s['subject_id'],
                 max_marks=s['max_marks'],
-                subject_order=s['subject_order'],
-                created_by=user.user_id,
-                updated_by=user.user_id
+                subject_order=s['subject_order']
             )
             db.session.add(new_entry)
 
@@ -288,7 +253,8 @@ def save_assignments():
 # POST : Copy Assignments
 # -------------------------------------------------
 @class_test_subject_bp.route('/copy', methods=['POST'])
-def copy_assignments():
+@token_required
+def copy_assignments(current_user):
     try:
         data = request.json
         source_class_test_id = data.get('source_class_test_id')
@@ -304,12 +270,7 @@ def copy_assignments():
         if not source_class_test_id or not target_ids:
             return jsonify({'error': 'Missing required fields'}), 400
 
-        user = get_current_user()
-        # Mock Check (from previous step for Save, keeping consistency if needed or relying on previous fix)
-        if not user:
-            class MockUser:
-                user_id = 1
-            user = MockUser()
+
 
         # 1. Fetch Source structure
         source_subjects = ClassTestSubject.query.filter_by(class_test_id=source_class_test_id).all()
@@ -375,9 +336,7 @@ def copy_assignments():
                     class_test_id=target_ct.id,
                     subject_id=item['subject_id'],
                     max_marks=item['max_marks'],
-                    subject_order=item['subject_order'],
-                    created_by=user.user_id,
-                    updated_by=user.user_id
+                    subject_order=item['subject_order']
                 ))
             
             success_count += 1

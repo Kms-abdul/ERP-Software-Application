@@ -37,6 +37,11 @@ def upgrade():
             ['module'],
             unique=False
         )
+        #Adding Subject Name Urdu   
+    with op.batch_alter_table('subjectmaster', schema=None) as batch_op:
+        batch_op.add_column(
+            sa.Column('subject_name_urdu', sa.String(length=255), nullable=True)
+        )
 
 
 def downgrade():
@@ -54,3 +59,6 @@ def downgrade():
 
         # Remove module column
         batch_op.drop_column('module')
+    # --- subjectmaster revert ---
+    with op.batch_alter_table('subjectmaster', schema=None) as batch_op:
+        batch_op.drop_column('subject_name_urdu')

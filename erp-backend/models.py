@@ -556,6 +556,8 @@ class SubjectMaster(db.Model, AuditMixin):
     __audit_module__ = "ACADEMICS"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     subject_name = db.Column(db.String(100), nullable=False)
+    subject_name_urdu = db.Column(db.String(255), nullable=True)  # New field
+
     subject_type = db.Column(db.Enum('Hifz', 'Academic'), default='Academic')
     academic_year = db.Column(db.String(20)) # New: Scope to year
     is_active = db.Column(db.Boolean, default=True) # New: Active Status
