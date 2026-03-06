@@ -36,6 +36,9 @@ def weekoff_to_dict(rule):
         "academic_year": rule.academic_year,
         "active": rule.active,
         "created_at": rule.created_at.isoformat() if rule.created_at else None,
+        "updated_at": rule.updated_at.isoformat() if rule.updated_at else None,
+        "created_by": rule.created_by,
+        "updated_by": rule.updated_by
     }
 
 
@@ -57,6 +60,9 @@ def holiday_to_dict(h):
         "academic_year": h.academic_year,
         "active": h.active,
         "created_at": h.created_at.isoformat() if h.created_at else None,
+        "updated_at": h.updated_at.isoformat() if h.updated_at else None,
+        "created_by": h.created_by,
+        "updated_by": h.updated_by
     }
 
 
@@ -326,19 +332,21 @@ def check_date(current_user):
             return jsonify({"error": "date is required"}), 400
 
         # Resolve branch
-        if not branch_id and branch_name:
+        if not branch_id and branch_name and branch_name not in ("All", "All Branches"):
             branch_obj = Branch.query.filter_by(branch_name=branch_name).first()
             if branch_obj:
                 branch_id = branch_obj.id
         if not branch_id:
             # Try from header
             h_branch = request.headers.get("X-Branch")
-            if h_branch:
+            if h_branch and h_branch not in ("All", "All Branches"):
                 branch_obj = Branch.query.filter_by(branch_name=h_branch).first()
                 if branch_obj:
                     branch_id = branch_obj.id
 
         if not branch_id:
+            if branch_name in ("All", "All Branches") or request.headers.get("X-Branch") in ("All", "All Branches"):
+                return jsonify({"is_weekoff": False, "is_holiday": False, "reason": ""}), 200
             return jsonify({"error": "branch_id or branch_name is required"}), 400
 
         # Resolve class
@@ -383,18 +391,20 @@ def check_month(current_user):
 
         # Resolve branch
         branch_id = None
-        if branch_name:
+        if branch_name and branch_name not in ("All", "All Branches"):
             branch_obj = Branch.query.filter_by(branch_name=branch_name).first()
             if branch_obj:
                 branch_id = branch_obj.id
         if not branch_id:
             h_branch = request.headers.get("X-Branch")
-            if h_branch:
+            if h_branch and h_branch not in ("All", "All Branches"):
                 branch_obj = Branch.query.filter_by(branch_name=h_branch).first()
                 if branch_obj:
                     branch_id = branch_obj.id
 
         if not branch_id:
+            if branch_name in ("All", "All Branches") or request.headers.get("X-Branch") in ("All", "All Branches"):
+                return jsonify({"blocked_dates": {}}), 200
             return jsonify({"error": "branch_name is required"}), 400
 
         # Resolve class

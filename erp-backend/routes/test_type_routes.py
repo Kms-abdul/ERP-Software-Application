@@ -41,7 +41,11 @@ def get_test_types():
             'max_marks': t.max_marks,
             'display_order': t.display_order,
             'is_active': t.is_active,
-            'academic_year': t.academic_year
+            'academic_year': t.academic_year,
+            'created_at': t.created_at.isoformat() if t.created_at else None,
+            'updated_at': t.updated_at.isoformat() if t.updated_at else None,
+            'created_by': t.created_by,
+            'updated_by': t.updated_by
         } for t in test_types]), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500

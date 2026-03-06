@@ -126,7 +126,8 @@ def update_fee_type(current_user, id):
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/fee-types/<int:fee_type_id>", methods=["DELETE"])
-def delete_fee_type(fee_type_id):
+@token_required
+def delete_fee_type(current_user, fee_type_id):
     """Delete a fee type with proper validation and cascade cleanup"""
     fee_type = FeeType.query.get_or_404(fee_type_id)
     
@@ -215,7 +216,10 @@ def get_class_fee_structure(current_user):
             "installments_count": fs.installments_count,
             "is_new_admission": fs.isnewadmission,
             "fee_group": fs.feegroup,
-            "created_at": fs.createdat.isoformat() if fs.createdat else None,
+            "created_at": fs.created_at.isoformat() if fs.created_at else None,
+            "updated_at": fs.updated_at.isoformat() if fs.updated_at else None,
+            "created_by": fs.created_by,
+            "updated_by": fs.updated_by,
             "installments": generate_installments(fs)
         })
     return jsonify({"fee_structures": results}), 200
@@ -248,7 +252,8 @@ def migrate_class_fee_structures(current_user):
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/class-fee-structure", methods=["POST"])
-def create_class_fee_structure():
+@token_required
+def create_class_fee_structure(current_user):
     data = request.json or {}
     
     # Check if this is a bulk create request (frontend sends 'fees' array)
@@ -345,7 +350,8 @@ def create_class_fee_structure():
     return jsonify({"error": "Invalid data format. Expected 'fees' list."}), 400
 
 @bp.route("/api/class-fee-structure/<int:id>", methods=["DELETE"])
-def delete_class_fee_structure(id):
+@token_required
+def delete_class_fee_structure(current_user, id):
     try:
         fs = ClassFeeStructure.query.get(id)
         if not fs:
@@ -555,7 +561,8 @@ def update_concession(current_user, original_title, original_year):
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/installment-schedule", methods=["GET"])
-def get_installments():
+@token_required
+def get_installments(current_user):
     try:
         fee_type_id = request.args.get('fee_type_id')
         branch = request.args.get('branch')
@@ -619,7 +626,11 @@ def get_installments():
                 "fee_type_id": i.fee_type_id,
                 "fee_type_name": i.fee_type.feetype if i.fee_type else None,
                 "branch": i.branch,
-                "academic_year": i.academic_year
+                "academic_year": i.academic_year,
+                "created_at": i.created_at.isoformat() if i.created_at else None,
+                "updated_at": i.updated_at.isoformat() if i.updated_at else None,
+                "created_by": i.created_by,
+                "updated_by": i.updated_by
             } for i in installments]
         }), 200
     except Exception as e:
@@ -756,7 +767,8 @@ def update_installment(current_user, id):
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/installment-schedule/<int:id>", methods=["DELETE"])
-def delete_installment(id):
+@token_required
+def delete_installment(current_user, id):
     try:
         inst = FeeInstallment.query.get(id)
         if not inst:

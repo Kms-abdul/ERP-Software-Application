@@ -427,8 +427,7 @@ def update_student(current_user, student_id):
                     class_name=new_class,
                     section=new_section,
                     roll_number=new_roll,
-                    is_promoted=False,
-                    created_at=datetime.now()
+                    is_promoted=False
                 )
                 db.session.add(record)
 
@@ -445,7 +444,8 @@ def update_student(current_user, student_id):
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 @bp.route("/api/students", methods=["POST"])
-def create_student():
+@token_required
+def create_student(current_user):
     h_year, err, code = require_academic_year()
     if err:
         return err, code
@@ -626,8 +626,7 @@ def create_student():
                 class_name=s.clazz,
                 section=s.section,
                 roll_number=s.Roll_Number,
-                is_promoted=False,
-                created_at=datetime.now()
+                is_promoted=False
             )
             db.session.add(init_record)
         except Exception as e:
@@ -646,7 +645,8 @@ def create_student():
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/students/<int:student_id>", methods=["DELETE"])
-def delete_student(student_id):
+@token_required
+def delete_student(current_user, student_id):
     try:
         student = Student.query.get(student_id)
         if not student:
@@ -662,7 +662,7 @@ def delete_student(student_id):
         student.status = "Inactive"
         student.inactivated_date = datetime.now()
         student.inactivate_reason = "Deleted via API"
-        # student.inactivated_by = current_user.user_id # Add if endpoint gets @token_required
+        student.inactivated_by = current_user.user_id
         db.session.commit()
         return jsonify({"message": "Student marked as Inactive successfully"}), 200
     except Exception as e:
@@ -670,7 +670,8 @@ def delete_student(student_id):
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/students/upload_csv", methods=["POST"])
-def upload_students_csv():
+@token_required
+def upload_students_csv(current_user):
     """Bulk upload students from CSV file"""
     try:
         if 'file' not in request.files:
@@ -988,8 +989,7 @@ def promote_students_bulk(current_user):
                     section=final_section,
                     roll_number=new_roll_no,
                     is_promoted=True,
-                    promoted_date=datetime.now(),
-                    created_at=datetime.now()
+                    promoted_date=datetime.now()
                 )
                 db.session.add(new_record)
 

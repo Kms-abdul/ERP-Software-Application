@@ -6,7 +6,8 @@ from models import (
 )
 from sqlalchemy import and_
 import traceback
-from datetime import datetime 
+from datetime import datetime
+from helpers import token_required
 
 student_marks_bp = Blueprint('student_marks_bp', __name__)
 
@@ -174,7 +175,8 @@ def get_marks_entry_grid():
 
 
 @student_marks_bp.route('/api/marks/entry/subject', methods=['POST'])
-def save_marks_entry():
+@token_required
+def save_marks_entry(current_user):
     try:
         data = request.json
         class_test_id = data.get('class_test_id')
@@ -186,7 +188,6 @@ def save_marks_entry():
         branch = data.get('branch')
         class_id = data.get('class_id')
         section = data.get('section')
-        user_id = data.get('user_id') # Logged in user
 
         if not all([class_test_id, subject_id, academic_year, branch]):
              return jsonify({"error": "Missing context data"}), 400
@@ -240,8 +241,6 @@ def save_marks_entry():
             if existing:
                 existing.marks_obtained = marks_obtained
                 existing.is_absent = is_absent
-                existing.updated_at = datetime.utcnow()
-                existing.updated_by = user_id
             else:
                 new_entry = StudentMarks(
                     student_id=student_id,
@@ -252,8 +251,7 @@ def save_marks_entry():
                     academic_year=academic_year,
                     branch=branch,
                     class_id=class_id,
-                    section=section,
-                    created_by=user_id
+                    section=section
                 )
                 db.session.add(new_entry)
 

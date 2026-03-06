@@ -217,6 +217,7 @@ const TakeAttendanceForm: React.FC = () => {
                 date: attendanceDate,
                 attendance: Object.entries(attendance).map(([studentId, status]) => ({
                     student_id: parseInt(studentId),
+                    date: attendanceDate,
                     status: status
                 }))
             };
@@ -516,7 +517,7 @@ const RegisterViewTab: React.FC = () => {
                 const dateMonth = parseInt(dateParts[1], 10);
                 return dateYear === selectedYear && dateMonth === selectedMonth;
             }).length;
-            
+
             const workingDays = daysInMonth - blockedDatesInMonth;
             const percentage = workingDays > 0
                 ? ((presentCount / workingDays) * 100).toFixed(1)

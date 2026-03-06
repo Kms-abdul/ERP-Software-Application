@@ -3,6 +3,7 @@ from extensions import db
 from models import User, Branch, UserBranchAccess
 from datetime import date, datetime, timedelta
 import jwt
+from helpers import token_required
  
 bp = Blueprint('auth_routes', __name__)
 
@@ -102,7 +103,8 @@ def debug_user(username):
     }), 200
 
 @bp.route("/api/users/add", methods=["POST"])
-def create_user():
+@token_required
+def create_user(current_user):
     try:
         data = request.json
         if not data:
@@ -141,7 +143,9 @@ def create_user():
             password=password,
             role=role,
             location=location,
-            branch=final_branch_name # Save Name instead of Code
+            branch=final_branch_name, # Save Name instead of Code
+            created_by=current_user.user_id,
+            updated_by=current_user.user_id
         )
         db.session.add(new_user)
         db.session.flush() # Flush to get user_id

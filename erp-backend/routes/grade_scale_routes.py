@@ -2,11 +2,13 @@ from flask import Blueprint, jsonify, request
 from extensions import db
 from models import GradeScale, GradeScaleDetails
 from sqlalchemy.exc import IntegrityError
+from helpers import token_required
 
 grade_scale_bp = Blueprint("grade_scale", __name__)
 
 @grade_scale_bp.route("/api/grade-scales", methods=["POST"])
-def create_grade_scale():
+@token_required
+def create_grade_scale(current_user):
     try:
         data = request.json
         if not data:
@@ -157,7 +159,11 @@ def get_grade_scales():
                 "academic_year": s.academic_year,
                 "branch": s.branch,
                 "location": s.location,
-                "total_marks": s.total_marks
+                "total_marks": s.total_marks,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+                "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+                "created_by": s.created_by,
+                "updated_by": s.updated_by
             })
             
         return jsonify(result), 200
@@ -195,7 +201,8 @@ def get_grade_scale_details_route(id):
         return jsonify({"error": str(e)}), 500
 
 @grade_scale_bp.route("/api/grade-scales/<int:id>", methods=["PUT"])
-def update_grade_scale(id):
+@token_required
+def update_grade_scale(current_user, id):
     try:
         scale = GradeScale.query.get(id)
         if not scale or not scale.is_active:
@@ -267,7 +274,8 @@ def update_grade_scale(id):
         return jsonify({"error": str(e)}), 500
 
 @grade_scale_bp.route("/api/grade-scales/<int:id>", methods=["DELETE"])
-def delete_grade_scale(id):
+@token_required
+def delete_grade_scale(current_user, id):
     try:
         scale = GradeScale.query.get(id)
         if not scale:

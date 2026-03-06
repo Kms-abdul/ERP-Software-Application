@@ -21,6 +21,8 @@ def get_default_location():
         return "Hyderabad"
 
 
+from flask import g
+
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -38,6 +40,9 @@ def token_required(f):
             current_user = User.query.filter_by(user_id=data['user_id']).first()
             if not current_user:
                  return jsonify({'error': 'User invalid!'}), 401
+                 
+            # Store user_id in global context for AuditMixin event listener
+            g.user_id = current_user.user_id
         except jwt.ExpiredSignatureError:
             return jsonify({'error': 'Token has expired!'}), 401
         except Exception as e:
@@ -181,7 +186,11 @@ def student_to_dict(s):
         "EmploymentCategory": s.EmploymentCategory,
         "branch": s.branch,
         "location": s.location,
-        "academic_year": s.academic_year
+        "academic_year": s.academic_year,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+        "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+        "created_by": s.created_by,
+        "updated_by": s.updated_by
     }
 
 def fee_type_to_dict(ft):
@@ -196,7 +205,11 @@ def fee_type_to_dict(ft):
         "description": ft.description,
         "branch": ft.branch,
         "academic_year": ft.academic_year,
-        "location": ft.location
+        "location": ft.location,
+        "created_at": ft.created_at.isoformat() if ft.created_at else None,
+        "updated_at": ft.updated_at.isoformat() if ft.updated_at else None,
+        "created_by": ft.created_by,
+        "updated_by": ft.updated_by
     }
 
 def assign_fee_to_student(student_id, fee_structure, is_student_new=False):

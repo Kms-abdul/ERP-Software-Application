@@ -50,7 +50,11 @@ def get_document_types(current_user):
                 "code": t.code,
                 "name": t.name,
                 "description": t.description,
-                "is_active": t.is_active
+                "is_active": t.is_active,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+                "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+                "created_by": t.created_by,
+                "updated_by": t.updated_by
             } for t in types
         ]), 200
     except Exception as e:
@@ -180,29 +184,38 @@ def upload_student_document(current_user):
 
         file.save(file_path)
 
-        # Delete previous doc of same type for this student
+        # Find existing document or create a new one to avoid IntegrityError
         existing_doc = StudentDocument.query.filter_by(
             student_id=student.student_id,
             document_type_id=doc_type.id
         ).first()
+
         if existing_doc:
-            db.session.delete(existing_doc)
-
-        new_doc = StudentDocument(
-            student_id=student.student_id,
-            document_type_id=doc_type.id,
-            document_no=document_no,
-            issued_by=issued_by,
-            issue_date=issue_date,
-            notes=notes,
-            file_name=new_filename,
-            file_path=relative_path,
-            file_size=os.path.getsize(file_path),
-            mime_type=file.content_type,
-            uploaded_by=current_user.user_id
-        )
-
-        db.session.add(new_doc)
+            existing_doc.document_no = document_no
+            existing_doc.issued_by = issued_by
+            existing_doc.issue_date = issue_date
+            existing_doc.notes = notes
+            existing_doc.file_name = new_filename
+            existing_doc.file_path = relative_path
+            existing_doc.file_size = os.path.getsize(file_path)
+            existing_doc.mime_type = file.content_type
+            existing_doc.updated_by = current_user.user_id
+            new_doc = existing_doc
+        else:
+            new_doc = StudentDocument(
+                student_id=student.student_id,
+                document_type_id=doc_type.id,
+                document_no=document_no,
+                issued_by=issued_by,
+                issue_date=issue_date,
+                notes=notes,
+                file_name=new_filename,
+                file_path=relative_path,
+                file_size=os.path.getsize(file_path),
+                mime_type=file.content_type,
+                created_by=current_user.user_id
+            )
+            db.session.add(new_doc)
         db.session.commit()
 
         return jsonify({
@@ -229,6 +242,10 @@ def get_student_documents(current_user, student_id):
             student_id=student_id
         ).all()
 
+        user_ids = {doc.created_by for doc in documents if doc.created_by}
+        users = User.query.filter(User.user_id.in_(user_ids)).all() if user_ids else []
+        user_map = {u.user_id: u.username for u in users}
+
         result = []
         for doc in documents:
             result.append({
@@ -241,9 +258,9 @@ def get_student_documents(current_user, student_id):
                 'issue_date': doc.issue_date.strftime('%Y-%m-%d') if doc.issue_date else None,
                 'notes': doc.notes,
                 'file_name': doc.file_name,
-                'uploaded_at': doc.uploaded_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'uploaded_at': doc.created_at.strftime('%Y-%m-%d %H:%M:%S') if doc.created_at else None,
                 'is_verified': doc.is_verified,
-                'upload_by_name': doc.uploader.username if doc.uploader else 'System'
+                'upload_by_name': user_map.get(doc.created_by, 'System')
             })
 
         return jsonify(result), 200

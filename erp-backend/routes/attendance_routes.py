@@ -224,12 +224,26 @@ def save_attendance(current_user):
         updated_count = 0
 
         # 2.5 Resolve branch to ID for weekoff/holiday check
-        branch_obj = Branch.query.filter_by(branch_name=h_branch).first()
-        if not branch_obj:
-            # Log warning and abort if branch is not found
-            return jsonify({"error": f"Branch '{h_branch}' not found. Cannot validate attendance against weekoff/holiday rules."}), 400
+        check_branch_id = None
+        student_branch_map = {}
+        students_obj_map = {}
         
-        check_branch_id = branch_obj.id
+        if h_branch in ("All", "All Branches"):
+            students = Student.query.filter(Student.student_id.in_(student_ids)).all()
+            students_obj_map = {s.student_id: s for s in students}
+            branch_names = set([s.branch for s in students if s.branch])
+            if branch_names:
+                branches = Branch.query.filter(Branch.branch_name.in_(branch_names)).all()
+                branch_name_to_id = {b.branch_name: b.id for b in branches}
+                for s in students:
+                    if s.branch in branch_name_to_id:
+                        student_branch_map[s.student_id] = branch_name_to_id[s.branch]
+        else:
+            branch_obj = Branch.query.filter_by(branch_name=h_branch).first()
+            if not branch_obj:
+                # Log warning and abort if branch is not found
+                return jsonify({"error": f"Branch '{h_branch}' not found. Cannot validate attendance against weekoff/holiday rules."}), 400
+            check_branch_id = branch_obj.id
 
         # 3. Process Batch
         for item in valid_items:
@@ -237,11 +251,18 @@ def save_attendance(current_user):
             status = item["status"]
 
             # 3a. Check weekoff / holiday
-            date_check = is_weekoff_or_holiday(item["date"], check_branch_id, h_year)
-            if date_check["is_weekoff"] or date_check["is_holiday"]:
-                skipped_count += 1
-                skip_details.append(f"Date {item['date']} blocked: {date_check['reason']}")
-                continue
+            s_branch_id = check_branch_id if h_branch not in ("All", "All Branches") else student_branch_map.get(item["student_id"])
+            if s_branch_id:
+                date_check = is_weekoff_or_holiday(item["date"], s_branch_id, h_year)
+                if date_check["is_weekoff"] or date_check["is_holiday"]:
+                    skipped_count += 1
+                    skip_details.append(f"Date {item['date']} blocked: {date_check['reason']}")
+                    continue
+
+            record_branch = h_branch
+            if h_branch in ("All", "All Branches"):
+                s_obj = students_obj_map.get(item["student_id"])
+                record_branch = s_obj.branch if s_obj and s_obj.branch else "Main"
 
             if key in record_map:
                 # Update
@@ -259,7 +280,7 @@ def save_attendance(current_user):
                     status=status,
                     update_count=0,
                     updated_at=datetime.now(),
-                    branch=h_branch,
+                    branch=record_branch,
                     academic_year=h_year,
                     location=current_user.location if current_user.location else get_default_location()
                 )
