@@ -215,7 +215,7 @@ const ClassesManagement: React.FC<ClassesManagementProps> = ({ navigateTo }) => 
 
     const handleReset = () => {
         setNewClassName('');
-        setSelectedBranch('');
+        //setSelectedBranch('');
         setSections([{ id: 1, name: '', studentStrength: '' }]);
     };
 
@@ -701,16 +701,9 @@ const ClassesManagement: React.FC<ClassesManagementProps> = ({ navigateTo }) => 
                                     Assign to the Branch<span className="text-red-500">*</span>
                                 </label>
                                 <select
+                                    disabled // This makes it read-only
                                     value={selectedBranch}
-                                    onChange={(e) => {
-                                        setSelectedBranch(e.target.value);
-                                        // Optional: Refresh summary when user manually changes branch in form? 
-                                        // Usually create form doesn't affect summary view filter immediately unless we want it to.
-                                        // But the summary view is on the left. So yes, if they change branch, maybe update summary?
-                                        // Let's keep it simple for now and only update on save or load.
-                                        fetchClassSummary(e.target.value);
-                                    }}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    className="w-full px-4 py-2 border border-gray-300 rounded bg-gray-100 cursor-not-allowed appearance-none"
                                 >
                                     <option value="">- Select-Branch -</option>
                                     {branches.map(b => (

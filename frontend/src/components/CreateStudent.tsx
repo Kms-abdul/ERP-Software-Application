@@ -841,7 +841,9 @@ const CreateStudent: React.FC<CreateStudentProps> = ({
         !formData.section ||
         !formData.Fatherfirstname ||
         !formData.FatherPhone ||
-        !formData.Motherfirstname)
+        !formData.Motherfirstname||
+        !formData.SchoolName||
+        !formData.PreviousSchoolClass)
     ) {
       alert("Fill required fields");
       return;
@@ -1441,12 +1443,13 @@ const CreateStudent: React.FC<CreateStudentProps> = ({
             />
           </CollapsibleSection>
 
-          {/* --- 5. BANK DETAILS --- */}
+          {/* --- 5. Previous School Details --- */}
           <CollapsibleSection title="Previous School Details">
             <FormField
               label="School Name"
               name="SchoolName"
               value={formData.SchoolName}
+              required
               onChange={handleInputChange}
               disabled={isViewMode}
             />
@@ -1454,6 +1457,7 @@ const CreateStudent: React.FC<CreateStudentProps> = ({
               label="School Class"
               name="PreviousSchoolClass"
               value={formData.PreviousSchoolClass}
+              required
               onChange={handleInputChange}
               disabled={isViewMode}
             />
