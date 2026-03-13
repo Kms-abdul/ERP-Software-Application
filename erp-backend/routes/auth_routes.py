@@ -1,9 +1,12 @@
 from flask import Blueprint, jsonify, request, current_app
 from extensions import db
-from models import User, Branch, UserBranchAccess
+from extensions import limiter
+from models import User, Branch, UserBranchAccess, PasswordResetOTP
 from datetime import date, datetime, timedelta
 import jwt
-from helpers import token_required
+import secrets
+import hashlib
+from helpers import token_required, hash_user_password, verify_user_password, send_otp_email
  
 bp = Blueprint('auth_routes', __name__)
 
@@ -16,7 +19,7 @@ def login_user():
         
         user = User.query.filter_by(username=username).first()
         
-        if not user or user.password != password:
+        if not user or not verify_user_password(password, user.password):
             return jsonify({"error": "invalid credentials"}), 401
     except Exception as e:
         print(f"[CRITICAL] Login Error: {e}")
@@ -112,17 +115,21 @@ def create_user(current_user):
             
         username = data.get("username")
         password = data.get("password")
+        useremail = data.get("useremail")
         role = data.get("role", "User")
         location = data.get("location", "")
         # Frontend sends "branches" array and legacy "branch" string
         branches = data.get("branches", [])
         legacy_branch = data.get("branch", "North") # Default fallback
 
-        if not username or not password:
-            return jsonify({"error": "Username and Password are required"}), 400
+        if not username or not password or not useremail:
+            return jsonify({"error": "Username, Password, and Email are required"}), 400
 
         if User.query.filter_by(username=username).first():
             return jsonify({"error": "Username already exists"}), 400
+            
+        if useremail and User.query.filter_by(useremail=useremail).first():
+            return jsonify({"error": "Email address is already in use by another user"}), 400
 
         # Helper: Resolve Branch Code to Name if possible
         final_branch_name = legacy_branch
@@ -140,7 +147,8 @@ def create_user(current_user):
         # Create User
         new_user = User(
             username=username,
-            password=password,
+            password=hash_user_password(password),
+            useremail=useremail,
             role=role,
             location=location,
             branch=final_branch_name, # Save Name instead of Code
@@ -214,3 +222,117 @@ def migrate_users_to_new_system():
         return jsonify({"message": f"Migrated {count} access records"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@bp.route("/api/users/forgot-password", methods=["POST"])
+@limiter.limit("3 per minute")
+def forgot_password():
+    data = request.json or {}
+    email = data.get("email")
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+        
+    user = User.query.filter_by(useremail=email).first()
+    if not user:
+        # Generic message to prevent email enumeration
+        return jsonify({"message": "If an account with that email exists, an OTP has been sent."}), 200
+        
+    # Invalidate previous unused OTPs for this user
+    PasswordResetOTP.query.filter_by(user_id=user.user_id, used=False).update({"used": True})
+        
+    otp = ''.join(secrets.choice('0123456789') for _ in range(6))
+    otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+    expires_at = datetime.utcnow() + timedelta(minutes=10)
+    
+    reset_otp = PasswordResetOTP(
+        user_id=user.user_id,
+        otp_hash=otp_hash,
+        expires_at=expires_at,
+        used=False
+    )
+    db.session.add(reset_otp)
+    db.session.commit()
+    
+    send_otp_email(email, otp)
+    
+    return jsonify({"message": "If an account with that email exists, an OTP has been sent."}), 200
+
+@bp.route("/api/users/verify-otp", methods=["POST"])
+@limiter.limit("5 per minute")
+def verify_otp():
+    data = request.json or {}
+    email = data.get("email")
+    otp = data.get("otp")
+    
+    if not email or not otp:
+        return jsonify({"error": "Email and OTP are required"}), 400
+        
+    user = User.query.filter_by(useremail=email).first()
+    if not user:
+        return jsonify({"error": "Invalid request"}), 400
+        
+    otp_record = PasswordResetOTP.query.filter_by(
+        user_id=user.user_id,
+        used=False
+    ).order_by(PasswordResetOTP.id.desc()).first()
+    
+    if not otp_record:
+        return jsonify({"error": "Invalid OTP"}), 400
+        
+    if (otp_record.attempts or 0) >= 5:
+        return jsonify({"error": "Maximum OTP attempts exceeded. Please request a new OTP."}), 400
+    
+    submitted_hash = hashlib.sha256(otp.encode()).hexdigest()
+    if not secrets.compare_digest(otp_record.otp_hash, submitted_hash):
+        otp_record.attempts = (otp_record.attempts or 0) + 1
+        db.session.commit()
+        return jsonify({"error": "Invalid OTP"}), 400
+        
+    if otp_record.expires_at < datetime.utcnow():
+        return jsonify({"error": "OTP has expired"}), 400
+        
+    return jsonify({"message": "OTP is valid"}), 200
+
+@bp.route("/api/users/reset-password", methods=["POST"])
+@limiter.limit("5 per minute")
+def reset_password():
+    data = request.json or {}
+    email = data.get("email")
+    otp = data.get("otp")
+    new_password = data.get("new_password")
+    
+    if not email or not otp or not new_password:
+        return jsonify({"error": "Email, OTP, and new password are required"}), 400
+        
+    user = User.query.filter_by(useremail=email).first()
+    if not user:
+        return jsonify({"error": "Invalid request"}), 400
+        
+    otp_record = PasswordResetOTP.query.filter_by(
+        user_id=user.user_id,
+        used=False
+    ).order_by(PasswordResetOTP.id.desc()).first()
+    
+    if not otp_record:
+        return jsonify({"error": "Invalid or expired OTP"}), 400
+        
+    if (otp_record.attempts or 0) >= 5:
+        return jsonify({"error": "Maximum OTP attempts exceeded. Please request a new OTP."}), 400
+    
+    submitted_hash = hashlib.sha256(otp.encode()).hexdigest()
+    if not secrets.compare_digest(otp_record.otp_hash, submitted_hash):
+        otp_record.attempts = (otp_record.attempts or 0) + 1
+        db.session.commit()
+        return jsonify({"error": "Invalid OTP"}), 400
+        
+    if otp_record.expires_at < datetime.utcnow():
+        return jsonify({"error": "Invalid or expired OTP"}), 400
+        
+    # Mark OTP as used
+    otp_record.used = True
+    
+    # Hash new password
+    user.password = hash_user_password(new_password)
+    
+    db.session.commit()
+    
+    return jsonify({"message": "Password has been successfully reset."}), 200

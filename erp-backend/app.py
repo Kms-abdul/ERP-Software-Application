@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory # Force Reload
 from flask_cors import CORS
 from dotenv import load_dotenv
 from flask_migrate import Migrate 
+from extensions import db, limiter, cache
 import os
 
 # -----------------------------
@@ -66,19 +67,36 @@ def create_app():
     else:
         app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///erp.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
+    app.config["SQLALCHEMY_POOL_SIZE"] = 20  
+    app.config["SQLALCHEMY_MAX_OVERFLOW"] = 20  
+    app.config["SQLALCHEMY_POOL_RECYCLE"] = 300  
+    app.config["SQLALCHEMY_POOL_TIMEOUT"] = 30  
+    app.config["SQLALCHEMY_POOL_PRE_PING"] = True 
     # -----------------------------
     # INIT EXTENSIONS
     # -----------------------------
     # Allow specific origins with credentials
+   # CORS: strict allowlist in production via CORS_ALLOWED_ORIGINS (comma-separated)
+    env_name = os.getenv("ENV", "development").lower()
+    if env_name == "production":
+        allowed_origins = [o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+        if not allowed_origins:
+            raise RuntimeError(
+                "CORS_ALLOWED_ORIGINS environment variable is required in production "
+                "and must contain at least one origin (comma-separated). "
+                f"Current env_name={env_name!r}, allowed_origins={allowed_origins!r}. "
+                "Set CORS_ALLOWED_ORIGINS (e.g. 'https://myapp.com') or change ENV to 'development'."
+            )
+    else:
+        allowed_origins = [
+            r"https://.*\.vercel\.app",
+            "http://localhost:5173",
+            "http://localhost:3000",
+            r"http://192\.168\.[0-9]+\.[0-9]+:[0-9]+"
+        ]
     CORS(app, resources={
         r"/*": {
-            "origins": [
-                r"https://.*\.vercel\.app",
-                "http://localhost:5173",
-                "http://localhost:3000",
-                r"http://192\.168\.[0-9]+\.[0-9]+:[0-9]+"
-            ],
+            "origins": allowed_origins,
             "supports_credentials": True,
             "allow_headers": ["Content-Type", "Authorization", "X-Branch", "X-Location", "X-Academic-Year", "X-Requested-With"],
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
@@ -86,6 +104,9 @@ def create_app():
     })
     db.init_app(app)
     migrate.init_app(app, db)
+
+    limiter.init_app(app)  
+    cache.init_app(app, config={'CACHE_TYPE': 'SimpleCache', 'CACHE_DEFAULT_TIMEOUT': 300})
 
 
     # -----------------------------

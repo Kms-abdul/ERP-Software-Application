@@ -11,6 +11,9 @@ import pandas as pd
 import traceback 
 import base64
 import os 
+import logging
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('student_routes', __name__)
 
@@ -168,14 +171,16 @@ def get_students(current_user):
             
         # Execute
         rows = q.all()
-        
-        with open("debug_students.txt", "a") as f:
-            f.write(f"--- Request ---\n")
-            f.write(f"Params: class={class_name}, sec={section}, branch={h_branch}, year={h_year}\n")
-            f.write(f"User: {current_user.username}, Role: {current_user.role}, Branch: {current_user.branch}\n")
-            f.write(f"Generated SQL: {str(q.statement.compile(compile_kwargs={'literal_binds': True}))}\n")
-            f.write(f"Rows found: {len(rows)}\n")
-
+        logger.debug(
+            "Request Debug | class=%s sec=%s branch=%s year=%s user=%s role=%s rows=%s",
+            class_name,
+            section,
+            h_branch,
+            h_year,
+            current_user.username,
+            current_user.role,
+            len(rows),
+        )
         results = []
         
         for row in rows:
@@ -205,11 +210,17 @@ def get_students(current_user):
         return jsonify({"students": results}), 200
 
     except Exception as e:
-        with open("last_error.txt", "w") as f:
-            f.write(str(e) + "\n")
-            traceback.print_exc(file=f)
-        print(f"API Error in get_students: {e}")
-        traceback.print_exc()
+        logger.error(
+            "Error in get_students | class=%s sec=%s branch=%s year=%s user=%s role=%s error=%s",
+            class_name,
+            section,
+            h_branch,
+            h_year,
+            current_user.username,
+            current_user.role,
+            str(e),
+            exc_info=True,
+        )
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/students/<int:student_id>", methods=["PUT"])

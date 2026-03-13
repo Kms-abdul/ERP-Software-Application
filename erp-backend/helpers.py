@@ -5,12 +5,100 @@ import traceback
 from extensions import db
 from datetime import datetime, date
 import os
+import hmac
+import hashlib
 from models import Branch, OrgMaster, Student, FeeInstallment, StudentFee, User, FeeType
+from werkzeug.security import generate_password_hash, check_password_hash
+import smtplib
+from email.message import EmailMessage
+from flask import current_app
+import logging
+
+logger = logging.getLogger(__name__)
 
 MONTHS = [
     "May", "June", "July", "August", "September", "October",
     "November", "December", "January", "February", "March", "April"
 ]
+
+
+def is_password_hash(stored_password):
+    """Return True if the value appears to be a werkzeug-generated hash."""
+    if not stored_password:
+        return False
+    return stored_password.startswith(("pbkdf2:", "scrypt:"))
+
+
+def verify_user_password(raw_password, stored_password):
+    """Verify both modern hashed passwords and legacy plaintext during migration phase."""
+    if is_password_hash(stored_password):
+        return check_password_hash(stored_password, raw_password or "")
+    return hmac.compare_digest(stored_password or "", raw_password or "")
+
+
+def hash_user_password(raw_password):
+    """Create a secure password hash for storage."""
+    return generate_password_hash(raw_password or "")
+
+
+def send_otp_email(to_email, otp):
+    """Send an OTP email to the user using SMTP settings from .env"""
+    # Load dynamically in case .env was recently modified
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+    
+    smtp_server = os.environ.get("SMTP_SERVER", "smtp.gmail.com").strip()
+    smtp_port_raw = os.environ.get("SMTP_PORT")
+    try:
+        smtp_port = int(smtp_port_raw) if smtp_port_raw else 587
+    except (ValueError, TypeError):
+        current_app.logger.warning(f"Invalid SMTP_PORT value '{smtp_port_raw}', falling back to 587")
+        smtp_port = 587
+    smtp_username = os.environ.get("SMTP_USERNAME", "").strip()
+    smtp_password = os.environ.get("SMTP_PASSWORD", "").strip()
+    
+    if current_app.debug:
+        current_app.logger.debug(f"[EMAIL DEBUG] Server={smtp_server}, Port={smtp_port}, To=<redacted>")
+    
+    if not smtp_username or not smtp_password:
+        current_app.logger.warning("SMTP credentials missing in .env. Falling back to console logging.")
+        if current_app.debug:
+            print(f"\n{'='*50}")
+            print(f"EMAIL MOCK - To: {to_email}")
+            print(f"Subject: Password Reset OTP")
+            print(f"OTP: {otp}")
+            print(f"{'='*50}\n")
+        return True
+
+    msg = EmailMessage()
+    msg['Subject'] = 'Password Reset OTP'
+    msg['From'] = smtp_username
+    msg['To'] = to_email
+    msg.set_content(f"""Hello,
+
+Your OTP for password reset is:
+
+{otp}
+
+This OTP will expire in 10 minutes.
+
+If you did not request this, please ignore this email.
+""")
+
+    try:
+        print(f"[EMAIL DEBUG] Connecting to {smtp_server}:{smtp_port}...")
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(smtp_username, smtp_password)
+            server.send_message(msg)
+        current_app.logger.info(f"Email sent successfully to {to_email}")
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Failed to send email to {to_email}: {str(e)}")
+        return False
+
 
 def get_default_location():
     """Fetch the first active location from DB as default"""
@@ -46,6 +134,7 @@ def token_required(f):
         except jwt.ExpiredSignatureError:
             return jsonify({'error': 'Token has expired!'}), 401
         except Exception as e:
+            current_app.logger.exception('Token validation failed')
             return jsonify({'error': 'Token is invalid!', 'details': str(e)}), 401
             
         return f(current_user, *args, **kwargs)
@@ -239,14 +328,16 @@ def assign_fee_to_student(student_id, fee_structure, is_student_new=False):
                       print(f"DEBUG: Skipping Fee {fee_structure.id} (Loc: {fee_structure.location}) for Student {student.branch} (Loc: {s_loc_name})")
                       return
 
-        with open("debug_log.txt", "a") as log:
-            log.write(f"DEBUG: assign_fee_to_student called for Student {student_id}, FeeStruct {fee_structure.id}\\n")
+        logger.debug(
+            f"assign_fee_to_student called for Student {student_id}, FeeStruct {fee_structure.id}"
+        )
+
         # LOGIC:
         # If fee structure is marked 'isnewadmission=True', it applies ONLY to New Students.
         # If current student is NOT new (is_student_new=False), skip this fee.
+
         if fee_structure.isnewadmission and not is_student_new:
-            with open("debug_log.txt", "a") as log:
-                log.write(f"DEBUG: Skipping - Fee is for new admission, student is not new.\\n")
+            logger.debug("Skipping - Fee is for new admission, student is not new.")
             return
 
         # Check if fee is already assigned to prevent duplicates

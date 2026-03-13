@@ -107,10 +107,24 @@ class User(db.Model, AuditMixin):
     __audit_module__ = "SYSTEM"
     user_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
-    password = db.Column(db.String(50), nullable=False)
+    password = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), default="Admin")
+    useremail = db.Column(db.String(100), unique=True, nullable=True)
     branch = db.Column(db.String(50), default="AllBranches")
     location = db.Column(db.String(50), default="Hyderabad")
+
+
+class PasswordResetOTP(db.Model, AuditMixin):
+    __tablename__ = "password_reset_otps"
+    __audit_module__ = "SYSTEM"
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    otp_hash = db.Column(db.String(64), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used = db.Column(db.Boolean, nullable=False, default=False)
+    attempts = db.Column(db.Integer, default=0)
+    
+    user = db.relationship('User', foreign_keys=[user_id], backref=db.backref('reset_otps', lazy=True))
 
 
 class Student(db.Model, AuditMixin):

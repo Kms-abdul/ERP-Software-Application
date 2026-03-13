@@ -4,7 +4,7 @@ import api from '../api';
 const Profile: React.FC = () => {
     const [username, setUsername] = useState('AUDIT-MN');
     const [newPassword, setNewPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState(''); 
+    const [confirmPassword, setConfirmPassword] = useState('');
 
     // Teacher Details State
     const [teacherFirstName, setTeacherFirstName] = useState('');
@@ -15,6 +15,7 @@ const Profile: React.FC = () => {
     // Add User State
     const [newUserUsername, setNewUserUsername] = useState('');
     const [newUserPassword, setNewUserPassword] = useState('');
+    const [newUserEmail, setNewUserEmail] = useState('');
     // const [newUserBranch, setNewUserBranch] = useState('North'); // Deprecated single select
     const [newUserRole, setNewUserRole] = useState('User');
     const [newUserLocation, setNewUserLocation] = useState('');
@@ -124,14 +125,15 @@ const Profile: React.FC = () => {
         e.preventDefault();
         setAddUserStatus({ type: '', msg: '' });
 
-        if (!newUserUsername || !newUserPassword) {
-            setAddUserStatus({ type: 'error', msg: 'Username and Password are required.' });
+        if (!newUserUsername || !newUserPassword || !newUserEmail) {
+            setAddUserStatus({ type: 'error', msg: 'Username, Password, and User Email are required.' });
             return;
         }
 
         const payload = {
             username: newUserUsername,
             password: newUserPassword,
+            useremail: newUserEmail,
             branches: selectedBranches.length > 0 ? selectedBranches : (newUserRole === 'Admin' ? ['All'] : []), // Default All for Admin if empty ? Or required?
             branch: selectedBranches[0] || 'North', // Legacy fallback
             location: newUserLocation,
@@ -145,6 +147,7 @@ const Profile: React.FC = () => {
             // Reset form
             setNewUserUsername('');
             setNewUserPassword('');
+            setNewUserEmail('');
             setSelectedBranches([]);
             setNewUserRole('User');
         } catch (error: any) {
@@ -330,6 +333,20 @@ const Profile: React.FC = () => {
                                         onChange={(e) => setNewUserPassword(e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                                         placeholder="Enter password"
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="newUserEmail" className="block text-sm font-medium text-gray-700 mb-1">
+                                        User Email <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="email"
+                                        id="newUserEmail"
+                                        value={newUserEmail}
+                                        onChange={(e) => setNewUserEmail(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="Enter user email"
+                                        required
                                     />
                                 </div>
                                 <div>
