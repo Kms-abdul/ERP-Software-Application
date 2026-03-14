@@ -336,3 +336,69 @@ def reset_password():
     db.session.commit()
     
     return jsonify({"message": "Password has been successfully reset."}), 200
+
+@bp.route("/api/users/profile", methods=["GET"])
+@token_required
+def get_user_profile(current_user):
+    try:
+        return jsonify({
+            "user": {
+                "user_id": current_user.user_id,
+                "username": current_user.username,
+                "useremail": getattr(current_user, 'useremail', ''),
+                "role": current_user.role,
+                "branch": current_user.branch,
+                "location": getattr(current_user, 'location', '')
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@bp.route("/api/users/update-username", methods=["PUT"])
+@token_required
+def update_username(current_user):
+    try:
+        data = request.json or {}
+        new_username = data.get("username")
+        
+        if not new_username:
+            return jsonify({"error": "New username is required"}), 400
+            
+        new_username = new_username.strip()
+        
+        if new_username == current_user.username:
+            return jsonify({"error": "Username is the same as the current one"}), 400
+            
+        # Check if username already exists
+        existing_user = User.query.filter_by(username=new_username).first()
+        if existing_user:
+            return jsonify({"error": "Username already taken"}), 400
+            
+        current_user.username = new_username
+        db.session.commit()
+        
+        return jsonify({"message": "Username updated successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@bp.route("/api/users/update-password", methods=["PUT"])
+@token_required
+def update_password(current_user):
+    try:
+        data = request.json or {}
+        new_password = data.get("newPassword")  # Profile.tsx sends {"newPassword": "..."}
+        
+        if not new_password:
+            return jsonify({"error": "New password is required"}), 400
+            
+        if len(new_password) < 6:
+            return jsonify({"error": "Password must be at least 6 characters"}), 400
+            
+        current_user.password = hash_user_password(new_password)
+        db.session.commit()
+        
+        return jsonify({"message": "Password updated successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
