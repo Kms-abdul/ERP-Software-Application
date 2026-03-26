@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
+import { auth } from "./api";
 
 export type Page =
   | "dashboard"
@@ -32,11 +33,11 @@ export type Page =
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return !!localStorage.getItem('token');
+    return auth.isAuthenticated();
   });
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
+    auth.clearToken();
     localStorage.removeItem('user');
     setIsAuthenticated(false);
   };

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from "axios";
 import { API_URL } from "../config";
+import { auth } from '../api';
 
 
 interface LoginProps {
@@ -42,6 +43,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       localStorage.removeItem("academicYear");
       localStorage.removeItem("user");
       localStorage.removeItem("token");
+      sessionStorage.removeItem("token");
       localStorage.removeItem("currentBranch");
       localStorage.removeItem("currentLocation");
 
@@ -54,8 +56,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
       try {
         if (response.data.token) {
-          localStorage.setItem('token', response.data.token);
-          console.log("Token saved to localStorage");
+          auth.setToken(response.data.token);
+          console.log("Token saved");
         } else {
           console.warn("No token found in login response");
         }
@@ -319,7 +321,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                   <input
                     type="password"
                     required
-                    minLength={6}
+                    minLength={8}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     className="block w-full p-0 border-0 bg-transparent focus:ring-0 sm:text-sm"

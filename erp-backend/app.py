@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from flask_migrate import Migrate 
 from extensions import db, limiter, cache
 import os
+import logging
 
 # -----------------------------
 # EXTENSIONS
@@ -51,7 +52,16 @@ def create_app():
     # -----------------------------
     # CONFIG
     # -----------------------------
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
+    env_name = os.getenv("ENV", "development").lower()
+    secret_key = os.getenv("SECRET_KEY")
+    if env_name == "production":
+        if not secret_key or len(secret_key) < 32:
+            raise RuntimeError("SECRET_KEY must be configured with at least 32 characters in production.")
+    elif not secret_key:
+        secret_key = "dev-only-secret-key-change-before-production"
+        logging.getLogger(__name__).warning("SECRET_KEY not set. Using a development fallback key.")
+
+    app.config["SECRET_KEY"] = secret_key
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
 
     DB_USER = os.getenv("DB_USER")
@@ -77,7 +87,6 @@ def create_app():
     # -----------------------------
     # Allow specific origins with credentials
    # CORS: strict allowlist in production via CORS_ALLOWED_ORIGINS (comma-separated)
-    env_name = os.getenv("ENV", "development").lower()
     if env_name == "production":
         allowed_origins = [o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
         if not allowed_origins:
@@ -137,7 +146,7 @@ def create_app():
     # -----------------------------
     @app.route('/uploads/<path:filename>')
     def serve_uploads(filename):
-        return send_from_directory(os.path.join(app.root_path, 'uploads'), filename)
+        return jsonify({"error": "Unauthorized"}), 403
 
     # -----------------------------
     # SERVE MEDIA (student photos + documents)
@@ -148,6 +157,13 @@ def create_app():
 
     @app.route('/Media/<path:filename>')
     def serve_media(filename):
+        normalized = filename.replace("\\", "/")
+        # Allow student profile photos to continue working, but prevent public access
+        # to arbitrary student documents. Those must go through the authorized API.
+        if normalized.startswith("student_document/"):
+            basename = os.path.basename(normalized).lower()
+            if basename not in {"profile.jpg", "profile.jpeg", "profile.png", "profile.webp"}:
+                return jsonify({"error": "Unauthorized"}), 403
         return send_from_directory(media_folder, filename)
 
     # -----------------------------
