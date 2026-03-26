@@ -31,6 +31,18 @@ interface CustomAxiosRequestConfig extends AxiosRequestConfig {
   headers?: CustomHeaders;
 }
 
+const getStoredToken = (): string | null => {
+  return sessionStorage.getItem('token') || localStorage.getItem('token');
+};
+
+const clearStoredAuth = (): void => {
+  sessionStorage.removeItem('token');
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  localStorage.removeItem('currentBranch');
+  localStorage.removeItem('academicYear');
+};
+
 // Create a configured axios instance with TypeScript types
 const api: AxiosInstance = axios.create({
   baseURL: API_URL,
@@ -52,7 +64,7 @@ api.interceptors.request.use(
     const savedUser: string | null = localStorage.getItem('user');
     const academicYear: string | null = localStorage.getItem('academicYear');
     const currentBranch: string | null = localStorage.getItem('currentBranch');
-    const token: string | null = localStorage.getItem('token');
+    const token: string | null = getStoredToken();
 
     // Add Authorization header if token exists
     if (token) {
@@ -125,10 +137,7 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       
       // Clear auth data
-      localStorage.removeItem('user');
-      localStorage.removeItem('token');
-      localStorage.removeItem('currentBranch');
-      localStorage.removeItem('academicYear');
+      clearStoredAuth();
       
       // Redirect to login
       if (!window.location.pathname.includes('/login')) {
@@ -209,22 +218,25 @@ export const auth = {
     localStorage.setItem('token', token);
     // Update axios default headers
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    sessionStorage.setItem('token', token);
+    localStorage.setItem('token', token);
   },
   
   // Remove authentication token
-  clearToken: (): void => {
+    clearToken: (): void => {
+    sessionStorage.removeItem('token');
     localStorage.removeItem('token');
     delete api.defaults.headers.common['Authorization'];
   },
   
   // Check if user is authenticated
   isAuthenticated: (): boolean => {
-    return !!localStorage.getItem('token');
+    return !!getStoredToken();
   },
   
   // Get current token
   getToken: (): string | null => {
-    return localStorage.getItem('token');
+    return getStoredToken();
   },
 };
 

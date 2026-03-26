@@ -9,7 +9,7 @@ db = SQLAlchemy()
 # Rate limiter (no app yet; init in app.create_app)
 limiter = Limiter(
     key_func=get_remote_address,
-    default_limits=[]  # define per-route limits with @limiter.limit
+    default_limits=["1000 per hour"]  # broad safety net; stricter limits still belong on sensitive routes
 )
 
 # Cache (init in app.create_app)

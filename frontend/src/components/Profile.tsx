@@ -9,6 +9,7 @@ const Profile: React.FC = () => {
     const [usernameStatus, setUsernameStatus] = useState<{ type: 'success' | 'error' | '', msg: string }>({ type: '', msg: '' });
 
     // Password State
+    const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [passwordLoading, setPasswordLoading] = useState(false);
@@ -157,13 +158,18 @@ const Profile: React.FC = () => {
 
     // ==================== PASSWORD HANDLERS ====================
     const handleSavePassword = async () => {
+        if (!currentPassword) {
+            setPasswordStatus({ type: 'error', msg: 'Current password is required' });
+            return;
+        }
+
         if (!newPassword) {
             setPasswordStatus({ type: 'error', msg: 'New password is required' });
             return;
         }
 
-        if (newPassword.length < 6) {
-            setPasswordStatus({ type: 'error', msg: 'Password must be at least 6 characters' });
+        if (newPassword.length < 8) {
+            setPasswordStatus({ type: 'error', msg: 'Password must be at least 8 characters' });
             return;
         }
 
@@ -177,10 +183,12 @@ const Profile: React.FC = () => {
 
         try {
             await api.put('/users/update-password', {
+                currentPassword,
                 newPassword: newPassword
             });
 
             setPasswordStatus({ type: 'success', msg: 'Password updated successfully!' });
+            setCurrentPassword('');
             setNewPassword('');
             setConfirmPassword('');
 
@@ -193,6 +201,7 @@ const Profile: React.FC = () => {
     };
 
     const handleCancelPassword = () => {
+        setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
         setPasswordStatus({ type: '', msg: '' });
@@ -236,8 +245,8 @@ const Profile: React.FC = () => {
             return;
         }
 
-        if (newUserPassword.length < 6) {
-            setAddUserStatus({ type: 'error', msg: 'Password must be at least 6 characters' });
+        if (newUserPassword.length < 8) {
+            setAddUserStatus({ type: 'error', msg: 'Password must be at least 8 characters' });
             return;
         }
 
@@ -375,6 +384,25 @@ const Profile: React.FC = () => {
 
                             <div className="grid grid-cols-1 gap-4">
                                 <div>
+                                    <label htmlFor="txtCurrentPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                                        Current Password <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="password"
+                                        id="txtCurrentPassword"
+                                        name="txtCurrentPassword"
+                                        maxLength={99}
+                                        value={currentPassword}
+                                        onChange={(e) => {
+                                            setCurrentPassword(e.target.value);
+                                            setPasswordStatus({ type: '', msg: '' });
+                                        }}
+                                        disabled={passwordLoading}
+                                        placeholder="Enter current password"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500 disabled:bg-gray-100"
+                                    />
+                                </div>
+                                <div>
                                     <label htmlFor="txtNewPassword" className="block text-sm font-medium text-gray-700 mb-1">
                                         New Password <span className="text-red-500">*</span>
                                     </label>
@@ -491,7 +519,7 @@ const Profile: React.FC = () => {
                                             }}
                                             disabled={addUserLoading}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-                                            placeholder="Enter password (min 6 chars)"
+                                            placeholder="Enter password (min 8 chars)"
                                         />
                                     </div>
 

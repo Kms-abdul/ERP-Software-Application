@@ -4,6 +4,7 @@ from models import FeePayment, Student, StudentFee
 from helpers import token_required, require_academic_year
 from datetime import date, datetime
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
 def consolidate_receipts(payments):
     """
@@ -75,7 +76,7 @@ def report_fee_today(current_user):
     today = date.today()
     
     try:
-        query = FeePayment.query.filter(FeePayment.payment_date == today)
+        query = FeePayment.query.options(selectinload(FeePayment.student)).filter(FeePayment.payment_date == today)
         query = query.filter(FeePayment.academic_year == h_year)
         
         if target_branch and target_branch not in ['All', 'AllBranches']:
@@ -133,7 +134,7 @@ def report_fee_daily(current_user):
         else:
              return jsonify({"error": "Date range (start_date, end_date) or specific date required"}), 400
         
-        query = FeePayment.query.filter(FeePayment.payment_date >= target_start)
+        query = FeePayment.query.options(selectinload(FeePayment.student)).filter(FeePayment.payment_date >= target_start)
         query = query.filter(FeePayment.payment_date <= target_end)
         query = query.filter(FeePayment.academic_year == h_year)
         
@@ -227,7 +228,7 @@ def report_fee_monthly(current_user):
         if not month or not year:
             return jsonify({"error": "Month and Year required"}), 400
             
-        query = FeePayment.query.filter(
+        query = FeePayment.query.options(selectinload(FeePayment.student)).filter(
             FeePayment.payment_month == int(month),
             FeePayment.payment_year == int(year)
         )
@@ -295,7 +296,7 @@ def report_fee_class_wise(current_user):
             }), 200
 
         # 1. Total Collected (from FeePayment)
-        p_query = FeePayment.query.filter_by(class_name=class_name, academic_year=h_year)
+        p_query = FeePayment.query.options(selectinload(FeePayment.student)).filter_by(class_name=class_name, academic_year=h_year)
         if target_branch and target_branch not in ['All', 'AllBranches']:
             p_query = p_query.filter_by(branch=target_branch)
         
@@ -373,7 +374,7 @@ def report_fee_installment_wise(current_user):
 
         # 1. Payments for this installment
         # We search by installment_name or month
-        p_query = FeePayment.query.filter(
+        p_query = FeePayment.query.options(selectinload(FeePayment.student)).filter(
             (FeePayment.installment_name == installment) | (FeePayment.fee_type == installment)
         ).filter(FeePayment.academic_year == h_year)
         
@@ -502,7 +503,7 @@ def get_receipt_data(current_user, receipt_no):
         
         # Scoped by Branch (if strict) and Year
         # Actually receipt_no should be unique regardless of year, but we enforce year check for security context
-        query = FeePayment.query.filter_by(receipt_no=receipt_no) #, academic_year=h_year) 
+        query = FeePayment.query.options(selectinload(FeePayment.student)).filter_by(receipt_no=receipt_no) #, academic_year=h_year) 
         # Note: If we enforce year check, user can't view old receipts easily if they switched year? 
         # But instructions say "Receipts must be fetched by receipt_no + branch + academic_year."
         query = query.filter_by(academic_year=h_year)

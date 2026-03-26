@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { PencilIcon, TrashIcon } from './icons';
 import { SetupIcon } from './icons';
+import { auth } from '../api';
 
 interface DocumentType {
     id: number;
@@ -49,7 +50,7 @@ const DocumentAdministration: React.FC = () => {
     const fetchDocumentTypes = async () => {
         setLoading(true);
         try {
-            const token = localStorage.getItem('token');
+            const token = auth.getToken();
             const response = await axios.get(`${API_URL}/documents/types`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -86,7 +87,7 @@ const DocumentAdministration: React.FC = () => {
         setSuccessMessage('');
 
         try {
-            const token = localStorage.getItem('token');
+            const token = auth.getToken();
             const headers = { Authorization: `Bearer ${token}` };
 
             if (editingDocType) {

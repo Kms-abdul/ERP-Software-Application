@@ -10,7 +10,17 @@ from helpers import token_required, hash_user_password, verify_user_password, se
  
 bp = Blueprint('auth_routes', __name__)
 
+MIN_PASSWORD_LENGTH = 8
+
+
+def _validate_password_strength(password):
+    if not password or len(password) < MIN_PASSWORD_LENGTH:
+        return f"Password must be at least {MIN_PASSWORD_LENGTH} characters"
+    return None
+
+
 @bp.route("/api/users/login", methods=["POST"])
+@limiter.limit("10 per minute")
 def login_user():
     try:
         data = request.json or {}
@@ -21,9 +31,14 @@ def login_user():
         
         if not user or not verify_user_password(password, user.password):
             return jsonify({"error": "invalid credentials"}), 401
+
+        # Upgrade legacy plaintext passwords in-place after a successful login.
+        if user.password and not str(user.password).startswith(("pbkdf2:", "scrypt:")):
+            user.password = hash_user_password(password)
+            db.session.commit()
     except Exception as e:
-        print(f"[CRITICAL] Login Error: {e}")
-        return jsonify({"error": f"Internal Login Error: {str(e)}"}), 500
+        current_app.logger.exception("Login error")
+        return jsonify({"error": "Internal login error"}), 500
     
     # Phase 4: Fetch Valid Branches
     valid_branches = []
@@ -46,7 +61,7 @@ def login_user():
                 "location_code": record.branch.location_code
             })
     except Exception as e:
-        print(f"Error fetching branches for user {username}: {e}")
+        current_app.logger.warning("Error fetching branches for user %s: %s", username, e)
         # Continue without branches if error occurs, or return error? For now, continue.
 
     token_payload = {
@@ -76,24 +91,25 @@ def login_user():
         }
     }), 200
 
-@bp.route("/api/verify-any-password", methods=["POST"])
-def verify_any_password():
+@bp.route("/api/verify-current-password", methods=["POST"])
+@token_required
+@limiter.limit("10 per minute")
+def verify_current_password(current_user):
     data = request.json or {}
     password = data.get("password")
     
     if not password:
         return jsonify({"success": False, "message": "Password required"}), 400
         
-    # Check if ANY user has this password
-    user = User.query.filter_by(password=password).first()
-    
-    if user:
+    if verify_user_password(password, current_user.password):
         return jsonify({"success": True}), 200
-    else:
-        return jsonify({"success": False, "message": "Invalid password"}), 200
+    return jsonify({"success": False, "message": "Invalid password"}), 200
 
 @bp.route("/api/debug-user/<string:username>", methods=["GET"])
-def debug_user(username):
+@token_required
+def debug_user(current_user, username):
+    if current_user.role != "Admin":
+        return jsonify({"error": "Unauthorized"}), 403
     user = User.query.filter_by(username=username).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
@@ -124,6 +140,10 @@ def create_user(current_user):
 
         if not username or not password or not useremail:
             return jsonify({"error": "Username, Password, and Email are required"}), 400
+
+        password_error = _validate_password_strength(password)
+        if password_error:
+            return jsonify({"error": password_error}), 400
 
         if User.query.filter_by(username=username).first():
             return jsonify({"error": "Username already exists"}), 400
@@ -196,7 +216,10 @@ def create_user(current_user):
         return jsonify({"error": str(e)}), 500
 
 @bp.route("/api/setup/migrate-users", methods=["POST"])
-def migrate_users_to_new_system():
+@token_required
+def migrate_users_to_new_system(current_user):
+    if current_user.role != "Admin":
+        return jsonify({"error": "Unauthorized"}), 403
     try:
         users = User.query.all()
         count = 0
@@ -302,6 +325,10 @@ def reset_password():
     
     if not email or not otp or not new_password:
         return jsonify({"error": "Email, OTP, and new password are required"}), 400
+
+    password_error = _validate_password_strength(new_password)
+    if password_error:
+        return jsonify({"error": password_error}), 400
         
     user = User.query.filter_by(useremail=email).first()
     if not user:
@@ -387,13 +414,21 @@ def update_username(current_user):
 def update_password(current_user):
     try:
         data = request.json or {}
+        current_password = data.get("currentPassword")
         new_password = data.get("newPassword")  # Profile.tsx sends {"newPassword": "..."}
         
         if not new_password:
             return jsonify({"error": "New password is required"}), 400
-            
-        if len(new_password) < 6:
-            return jsonify({"error": "Password must be at least 6 characters"}), 400
+
+        password_error = _validate_password_strength(new_password)
+        if password_error:
+            return jsonify({"error": password_error}), 400
+
+        if not current_password:
+            return jsonify({"error": "Current password is required"}), 400
+
+        if not verify_user_password(current_password, current_user.password):
+            return jsonify({"error": "Current password is incorrect"}), 400
             
         current_user.password = hash_user_password(new_password)
         db.session.commit()

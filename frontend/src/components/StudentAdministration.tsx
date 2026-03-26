@@ -9,6 +9,7 @@ import CreateStudent from './CreateStudent';
 import PromoteStudents from './PromoteStudents';
 import ClassSummary from './ClassSummary';
 import MakeStudentInactive from './MakeStudentInactive';
+import SearchStudent from './SearchStudent';
 import { Student } from '../types';
 import api from '../api';
 
@@ -245,7 +246,7 @@ const StudentList: React.FC<{ onView: any; onEdit: any; setActiveView: any }> =
 
             try {
                 // Verify password
-                const verifyRes = await api.post('/verify-any-password', { password });
+                const verifyRes = await api.post('/verify-current-password', { password });
                 if (verifyRes.data.success) {
                     // Delete student
                     // Assuming student object has student_id based on backend model
@@ -569,6 +570,9 @@ const StudentAdministration: React.FC<StudentAdministrationProps> = ({ navigateT
 
             case 'summary':
                 return <ClassSummary onBack={() => setActiveView('students')} />;
+
+            case 'search':
+                return <SearchStudent />;
 
             case 'inactive':
                 return <MakeStudentInactive />;

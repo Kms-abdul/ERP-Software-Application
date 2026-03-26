@@ -3,6 +3,7 @@ import DocumentAdministration from './DocumentAdministration';
 import StudentDocumentManagement from './StudentDocumentManagement';
 import { DocumentReportIcon, SetupIcon, SearchIcon, DownloadIcon, TrashIcon, RefreshIcon, UserIcon } from './icons';
 import api from '../api';
+import { auth } from '../api';
 import axios from 'axios';
 
 type DocTab = 'dashboard' | 'add-category' | 'upload-documents' | 'student-doc-view';
@@ -90,7 +91,7 @@ const StudentDocumentView: React.FC = () => {
         if (!docMap[sid]) {
             setLoadingDocs(sid);
             try {
-                const token = localStorage.getItem('token');
+                const token = auth.getToken();
                 const res = await axios.get(`${API_URL}/documents/student/${sid}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -105,7 +106,7 @@ const StudentDocumentView: React.FC = () => {
 
     const handleDownload = async (docId: number, fileName: string) => {
         try {
-            const token = localStorage.getItem('token');
+            const token = auth.getToken();
             const res = await axios.get(`${API_URL}/documents/download/${docId}`, {
                 headers: { Authorization: `Bearer ${token}` }, responseType: 'blob'
             });
@@ -124,7 +125,7 @@ const StudentDocumentView: React.FC = () => {
     const handleDelete = async (docId: number, studentId: number) => {
         if (!window.confirm('Delete this document?')) return;
         try {
-            const token = localStorage.getItem('token');
+            const token = auth.getToken();
             await axios.delete(`${API_URL}/documents/${docId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });

@@ -8,6 +8,7 @@ import {
     RefreshIcon
 } from './icons';
 import api from '../api';
+import { auth } from '../api';
 import { Student } from '../types';
 import axios from 'axios';
 
@@ -93,7 +94,7 @@ const StudentDocumentManagement: React.FC = () => {
 
     const loadDocumentTypes = async () => {
         try {
-            const token = localStorage.getItem('token');
+            const token = auth.getToken();
             const response = await axios.get(`${API_URL}/documents/types`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -147,7 +148,7 @@ const StudentDocumentManagement: React.FC = () => {
     const loadStudentDocuments = async (studentId: any) => {
         setLoadingDocs(true);
         try {
-            const token = localStorage.getItem('token');
+            const token = auth.getToken();
             const res = await axios.get(`${API_URL}/documents/student/${studentId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -199,7 +200,7 @@ const StudentDocumentManagement: React.FC = () => {
         if (uploadNotes) formData.append('notes', uploadNotes);
 
         try {
-            const token = localStorage.getItem('token');
+            const token = auth.getToken();
             await axios.post(`${API_URL}/documents/upload`, formData, {
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
             });
@@ -216,7 +217,7 @@ const StudentDocumentManagement: React.FC = () => {
 
     const handleDownloadDocument = async (docId: number, fileName: string) => {
         try {
-            const token = localStorage.getItem('token');
+            const token = auth.getToken();
             const response = await axios.get(`${API_URL}/documents/download/${docId}`, {
                 headers: { Authorization: `Bearer ${token}` },
                 responseType: 'blob'

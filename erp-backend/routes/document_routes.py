@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, send_file, current_app
 from extensions import db
-from models import DocumentType, StudentDocument, Student, User
+from models import DocumentType, StudentDocument, Student, User, Branch, UserBranchAccess
 from helpers import token_required
 from datetime import datetime
 import os
@@ -33,6 +33,27 @@ def get_project_root():
 def get_media_base():
     """Returns: HifzErpSoftwareApplication/Media/student_document/"""
     return os.path.join(get_project_root(), 'Media', 'student_document')
+
+
+def can_access_student(current_user, student):
+    if not student:
+        return False
+    if current_user.role == 'Admin' or current_user.branch == 'All':
+        return True
+    if student.branch == current_user.branch:
+        return True
+
+    branch_obj = Branch.query.filter(
+        (Branch.branch_code == student.branch) | (Branch.branch_name == student.branch)
+    ).first()
+    if not branch_obj:
+        return False
+
+    return UserBranchAccess.query.filter_by(
+        user_id=current_user.user_id,
+        branch_id=branch_obj.id,
+        is_active=True
+    ).first() is not None
 
 
 # ==========================================
@@ -152,6 +173,8 @@ def upload_student_document(current_user):
 
         if not student or not doc_type:
             return jsonify({'message': 'Invalid student or document type'}), 400
+        if not can_access_student(current_user, student):
+            return jsonify({'message': 'Access denied'}), 403
 
         # Optional metadata
         document_no  = request.form.get('document_no')
@@ -238,6 +261,12 @@ def upload_student_document(current_user):
 @token_required
 def get_student_documents(current_user, student_id):
     try:
+        student = Student.query.get(student_id)
+        if not student:
+            return jsonify({'message': 'Student not found'}), 404
+        if not can_access_student(current_user, student):
+            return jsonify({'message': 'Access denied'}), 403
+
         documents = StudentDocument.query.filter_by(
             student_id=student_id
         ).all()
@@ -279,6 +308,8 @@ def download_document(current_user, doc_id):
         doc = StudentDocument.query.get(doc_id)
         if not doc:
             return jsonify({'message': 'Document not found'}), 404
+        if not can_access_student(current_user, doc.student):
+            return jsonify({'message': 'Access denied'}), 403
 
         project_root = get_project_root()
         abs_path = os.path.abspath(os.path.join(project_root, doc.file_path))

@@ -63,11 +63,7 @@ def send_otp_email(to_email, otp):
     if not smtp_username or not smtp_password:
         current_app.logger.warning("SMTP credentials missing in .env. Falling back to console logging.")
         if current_app.debug:
-            print(f"\n{'='*50}")
-            print(f"EMAIL MOCK - To: {to_email}")
-            print(f"Subject: Password Reset OTP")
-            print(f"OTP: {otp}")
-            print(f"{'='*50}\n")
+            current_app.logger.debug("EMAIL MOCK - To=%s Subject=Password Reset OTP OTP=%s", to_email, otp)
         return True
 
     msg = EmailMessage()
@@ -86,7 +82,8 @@ If you did not request this, please ignore this email.
 """)
 
     try:
-        print(f"[EMAIL DEBUG] Connecting to {smtp_server}:{smtp_port}...")
+        if current_app.debug:
+            current_app.logger.debug("[EMAIL DEBUG] Connecting to %s:%s", smtp_server, smtp_port)
         with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as server:
             server.ehlo()
             server.starttls()
@@ -135,7 +132,7 @@ def token_required(f):
             return jsonify({'error': 'Token has expired!'}), 401
         except Exception as e:
             current_app.logger.exception('Token validation failed')
-            return jsonify({'error': 'Token is invalid!', 'details': str(e)}), 401
+            return jsonify({'error': 'Token is invalid!'}), 401
             
         return f(current_user, *args, **kwargs)
     
@@ -301,17 +298,21 @@ def fee_type_to_dict(ft):
         "updated_by": ft.updated_by
     }
 
+
+def write_debug_log(message):
+    logger.debug(message)
+
 def assign_fee_to_student(student_id, fee_structure, is_student_new=False):
     try:
         student = Student.query.get(student_id)
         if not student:
-            print(f"DEBUG: Student {student_id} not found in assign_fee_to_student")
+            logger.debug("Student %s not found in assign_fee_to_student", student_id)
             return
             
         # Verify strict branch match: FeeStructure Branch must match Student Branch (or be All)
         # If Fee Structure is for "North" and Student is "West", DO NOT ASSIGN.
         if fee_structure.branch and fee_structure.branch != "All" and fee_structure.branch != student.branch:
-             print(f"DEBUG: Skipping Fee {fee_structure.id} (Branch: {fee_structure.branch}) for Student {student.branch}")
+             logger.debug("Skipping fee %s because branch %s does not match student branch %s", fee_structure.id, fee_structure.branch, student.branch)
              return
             
         # Verify strict Location match if Branch is All
@@ -325,7 +326,7 @@ def assign_fee_to_student(student_id, fee_structure, is_student_new=False):
                  s_loc_name = s_loc_master.display_name if s_loc_master else get_default_location()
                  
                  if s_loc_name.lower() != fee_structure.location.lower():
-                      print(f"DEBUG: Skipping Fee {fee_structure.id} (Loc: {fee_structure.location}) for Student {student.branch} (Loc: {s_loc_name})")
+                      logger.debug("Skipping fee %s because location %s does not match student location %s", fee_structure.id, fee_structure.location, s_loc_name)
                       return
 
         logger.debug(
@@ -347,8 +348,7 @@ def assign_fee_to_student(student_id, fee_structure, is_student_new=False):
             academic_year=fee_structure.academicyear,
         ).first()
         if exists:
-            with open("debug_log.txt", "a") as log:
-                log.write(f"DEBUG: Skipping - Fee already exists for student.\\n")
+            write_debug_log("Skipping fee assignment because the fee already exists for the student.")
             return
         
         # Installment Logic
@@ -376,26 +376,22 @@ def assign_fee_to_student(student_id, fee_structure, is_student_new=False):
              has_title_match = any(normalize_fee_title(i.title) == norm_type for i in relevant_installments)
              
              if not has_title_match:
-                 with open("debug_log.txt", "a") as log:
-                     log.write(f"DEBUG: No matching Installment found for {fee_structure.feetype.feetype}. Proceeding to fallback checks (One-Time/Monthly).\\n")
+                 write_debug_log(f"No matching installment found for fee type {fee_structure.feetype.feetype}. Proceeding to fallback checks.")
                  # REMOVED strict return here to allow fallback to One-Time/Monthly logic below
                  # return 
         
         if fee_structure.installments_count > 0 and fee_structure.totalamount:
-            with open("debug_log.txt", "a") as log:
-                log.write(f"DEBUG: Creating installments for Student {student_id}\\n")
+            write_debug_log(f"Creating installments for student {student_id}.")
             
             # 1. NEW LOGIC: Use Linked Installments if available
             if not linked_installments and fee_structure.feetype:
                  norm_type = normalize_fee_title(fee_structure.feetype.feetype)
                  linked_installments = [i for i in relevant_installments if normalize_fee_title(i.title) == norm_type]
                  if linked_installments:
-                     with open("debug_log.txt", "a") as log:
-                         log.write(f"DEBUG: Found {len(linked_installments)} installments via Title Match. Using them.\\n")
+                     write_debug_log(f"Found {len(linked_installments)} installments via title match.")
 
             if linked_installments:
-                with open("debug_log.txt", "a") as log:
-                    log.write(f"DEBUG: Found {len(linked_installments)} linked installments. Using them.\\n")
+                write_debug_log(f"Found {len(linked_installments)} linked installments.")
                 
                 # Sort by start_date to ensuring chronological order 
                 linked_installments.sort(key=lambda x: x.start_date)
@@ -428,20 +424,17 @@ def assign_fee_to_student(student_id, fee_structure, is_student_new=False):
                         due_date=inst.last_pay_date
                     )
                     db.session.add(sf)
-                with open("debug_log.txt", "a") as log:
-                    log.write(f"DEBUG: Added {count} installments from definitions.\\n")
+                write_debug_log(f"Added {count} installments from definitions.")
 
             else:
                  # 2. FALLBACK REMOVED
                  # If no installments defined (by ID or Title), DO NOT create random 12 months.
                  # User Requirement: "if we don't create installments ... should not be created"
-                 with open("debug_log.txt", "a") as log:
-                     log.write(f"DEBUG: No linked or title-matched installments found. Skipping installment creation.\\n")
+                 write_debug_log("No linked or title-matched installments found. Skipping installment creation.")
                  pass
                 
         elif fee_structure.monthly_amount:
-            with open("debug_log.txt", "a") as log:
-                log.write(f"DEBUG: Creating monthly fees (fallback) for Student {student_id}\\n")
+            write_debug_log(f"Creating monthly fee fallback for student {student_id}.")
             # Fallback for simple monthly amount if installments_count is 0 but monthly_amount is set
             # (Though usually installments_count should be set for monthly fees)
             for month in MONTHS:
@@ -465,8 +458,7 @@ def assign_fee_to_student(student_id, fee_structure, is_student_new=False):
                 )
                 db.session.add(sf)
         else:
-            with open("debug_log.txt", "a") as log:
-                log.write(f"DEBUG: Creating one-time fee for Student {student_id}\\n")
+            write_debug_log(f"Creating one-time fee for student {student_id}.")
             # One-Time Fee
             # Try to find due date by Fee Type Name
             due_date = None
@@ -490,8 +482,7 @@ def assign_fee_to_student(student_id, fee_structure, is_student_new=False):
             
         db.session.flush() # Flush to ensure IDs are generated if needed, but commit is handled by caller
     except Exception as e:
-        with open("debug_log.txt", "a") as log:
-            log.write(f"Fee assignment error: {e}\\n")
+        logger.exception("Fee assignment error")
         traceback.print_exc()
 
 def auto_enroll_student_fee(student_id, class_name, year=None, is_student_new=True):
@@ -529,7 +520,7 @@ def auto_enroll_student_fee(student_id, class_name, year=None, is_student_new=Tr
         ClassFeeStructure.branch == student.branch # STRICT: Only apply fees created for THIS branch
     ).all()
     
-    print(f"DEBUG: Auto-enrolling Student {student_id} (Class {class_name}, Year {target_year}). Found {len(structures)} structures.")
+    logger.debug("Auto-enrolling student %s for class %s year %s with %s structures", student_id, class_name, target_year, len(structures))
 
     for fs in structures:
         assign_fee_to_student(student_id, fs, is_student_new=is_student_new)
