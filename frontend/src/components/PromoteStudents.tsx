@@ -5,10 +5,10 @@ import { Student } from '../types';
 interface PromoteStudentsProps {
     onBack?: () => void;
 }
- 
+
 const PromoteStudents: React.FC<PromoteStudentsProps> = ({ onBack }) => {
     // -------------------------------------------------------------
-    // Source State
+    // Source State 
     // -------------------------------------------------------------
     const [sourceYear, setSourceYear] = useState(localStorage.getItem('academicYear') || '');
     const [sourceClass, setSourceClass] = useState('');
@@ -45,7 +45,7 @@ const PromoteStudents: React.FC<PromoteStudentsProps> = ({ onBack }) => {
         });
     }, []);
 
-     useEffect(() => {
+    useEffect(() => {
         if (!sourceClass) {
             setSourceSections([]);
             setSourceSection('');
@@ -100,6 +100,7 @@ const PromoteStudents: React.FC<PromoteStudentsProps> = ({ onBack }) => {
                 section: sourceSection,
                 search: sourceSearch,
                 branch: globalBranch,
+                include_fee_due: true,
                 // We need to tell backend we want THIS specific year's data
                 // If backend relies solely on Header, we might need to swap header or update backend.
                 // Assuming we updated backend to look for ANY year if provided (we need to verify this).
@@ -138,9 +139,11 @@ const PromoteStudents: React.FC<PromoteStudentsProps> = ({ onBack }) => {
     }, [targetYear, targetClass, targetSection]);
 
 
+    const eligibleStudents = sourceStudents.filter(s => !s.total_due || s.total_due <= 0);
+
     const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.checked) {
-            setSelectedStudentIds(sourceStudents.map(s => s.student_id).filter((id): id is number => id !== undefined));
+            setSelectedStudentIds(eligibleStudents.map(s => s.student_id).filter((id): id is number => id !== undefined));
         } else {
             setSelectedStudentIds([]);
         }
@@ -231,22 +234,43 @@ const PromoteStudents: React.FC<PromoteStudentsProps> = ({ onBack }) => {
                         <table className="w-full text-sm border-collapse">
                             <thead>
                                 <tr className="bg-gray-100 text-left">
-                                    <th className="p-2 border"><input type="checkbox" onChange={handleSelectAll} checked={sourceStudents.length > 0 && selectedStudentIds.length === sourceStudents.length} /></th>
+                                    <th className="p-2 border"><input type="checkbox" onChange={handleSelectAll} checked={eligibleStudents.length > 0 && selectedStudentIds.length === eligibleStudents.length} /></th>
                                     <th className="p-2 border">Adm No</th>
                                     <th className="p-2 border">Name</th>
                                     <th className="p-2 border">Class</th>
+                                    <th className="p-2 border text-right">Total Due</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {loadingSource ? <tr><td colSpan={4} className="p-4 text-center">Loading...</td></tr> :
-                                    sourceStudents.map((s) => (
-                                        <tr key={s.student_id} className="hover:bg-indigo-50">
-                                            <td className="p-2 border"><input type="checkbox" checked={s.student_id ? selectedStudentIds.includes(s.student_id) : false} onChange={() => handleSelectOne(s.student_id)} /></td>
-                                            <td className="p-2 border">{s.admNo}</td>
-                                            <td className="p-2 border">{s.first_name || s.name} {s.last_name || ''}</td>
-                                            <td className="p-2 border">{s.class} {s.section}</td>
-                                        </tr>
-                                    ))}
+                                {loadingSource ? <tr><td colSpan={5} className="p-4 text-center">Loading...</td></tr> :
+                                    sourceStudents.map((s) => {
+                                        const hasDue = s.total_due && s.total_due > 0;
+                                        return (
+                                            <tr key={s.student_id} className="hover:bg-indigo-50">
+                                                <td className="p-2 border">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={s.student_id ? selectedStudentIds.includes(s.student_id) : false}
+                                                        onChange={() => {
+                                                            if (hasDue) {
+                                                                alert(`Cannot select student. Pending due: ₹${s.total_due}`);
+                                                                return;
+                                                            }
+                                                            handleSelectOne(s.student_id);
+                                                        }}
+                                                        disabled={Boolean(hasDue)}
+                                                        title={hasDue ? 'Clear dues to promote' : undefined}
+                                                    />
+                                                </td>
+                                                <td className="p-2 border">{s.admNo}</td>
+                                                <td className="p-2 border">{s.first_name || s.name} {s.last_name || ''}</td>
+                                                <td className="p-2 border">{s.class} {s.section}</td>
+                                                <td className={`p-2 border text-right ${hasDue ? 'text-red-600 font-semibold' : 'text-green-600'}`}>
+                                                    ₹{s.total_due || 0}
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
                             </tbody>
                         </table>
                     </div>

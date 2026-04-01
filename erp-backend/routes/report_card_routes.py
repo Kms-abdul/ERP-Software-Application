@@ -1015,3 +1015,4 @@ def get_student_report_by_year(current_user):
             cursor.close()
         if conn:
             conn.close()
+            

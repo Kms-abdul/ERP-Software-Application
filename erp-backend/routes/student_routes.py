@@ -11,6 +11,7 @@ import pandas as pd
 import traceback 
 import base64
 import os 
+import contextlib
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,17 @@ def save_student_photo(student, photo_data):
         # __file__ = .../erp-backend/routes/student_routes.py
         # project root = two levels up from routes/
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-        student_dir = os.path.join(project_root, 'Media', 'student_document', student.admission_no)
+        import re
+        safe_admission_no = re.sub(r'[^a-zA-Z0-9_\-]', '', str(student.admission_no))
+        if not safe_admission_no:
+            raise ValueError("Invalid admission number for directory creation")
+            
+        student_dir = os.path.abspath(os.path.join(project_root, 'Media', 'student_document', safe_admission_no))
+        
+        # Ensure it's still inside Media/student_document
+        base_dir = os.path.abspath(os.path.join(project_root, 'Media', 'student_document'))
+        if not student_dir.startswith(base_dir):
+            raise ValueError("Invalid path traversal attempt")
 
         if not os.path.exists(student_dir):
             os.makedirs(student_dir)
@@ -54,7 +65,7 @@ def save_student_photo(student, photo_data):
             f.write(data_bytes)
 
         # Store relative path from project root, forward slashes for URL compatibility
-        student.photopath = f"Media/student_document/{student.admission_no}/{filename}"
+        student.photopath = f"Media/student_document/{safe_admission_no}/{filename}"
 
     except Exception as e:
         print(f"Error saving photo: {e}")
@@ -94,9 +105,9 @@ def get_students(current_user):
         
         if class_name:
             if h_year:
-                 q = q.filter(or_(
+                q = q.filter(or_(
                     StudentAcademicRecord.class_name == class_name,
-                    and_(StudentAcademicRecord.id == None, Student.clazz == class_name)
+                    and_(StudentAcademicRecord.id.is_(None), Student.clazz == class_name)
                 ))
             else:
                  q = q.filter_by(clazz=class_name)
@@ -105,7 +116,7 @@ def get_students(current_user):
             if h_year:
                 q = q.filter(or_(
                     StudentAcademicRecord.section == section,
-                    and_(StudentAcademicRecord.id == None, Student.section == section)
+                    and_(StudentAcademicRecord.id.is_(None), Student.section == section)
                 ))
             else:
                  q = q.filter_by(section=section)
@@ -136,30 +147,18 @@ def get_students(current_user):
              
              has_access = False
              # Check explicit branch request access
-             if req_branch and req_branch != "All":
-                 b_obj = Branch.query.filter(or_(Branch.branch_code == req_branch, Branch.branch_name == req_branch)).first()
-                 if b_obj:
-                     access = UserBranchAccess.query.filter_by(user_id=current_user.user_id, branch_id=b_obj.id, is_active=True).first()
-                     if access:
-                         has_access = True
+             if req_branch and req_branch != "All" and (b_obj := Branch.query.filter(or_(Branch.branch_code == req_branch, Branch.branch_name == req_branch)).first()):
+                 has_access = bool(UserBranchAccess.query.filter_by(user_id=current_user.user_id, branch_id=b_obj.id, is_active=True).first())
              
-             if has_access:
-                 # User has access to the requested branch
+             if has_access or (current_user.branch == 'All' and req_branch and req_branch != "All"):
                  branch_filter = get_branch_query_filter(Student.branch, req_branch)
              elif current_user.branch != 'All':
-                 # User is restricted to their home branch 
-                 # (If they requested a different branch but didn't have access, we fall back or show empty? 
-                 #  Ideally strict check would block earlier, but here we filter query)
                   branch_filter = get_branch_query_filter(Student.branch, current_user.branch)
-             else:
-                 # User is All branch (e.g. Super Staff?) - rare for non-admin
-                 if req_branch and req_branch != "All":
-                      branch_filter = get_branch_query_filter(Student.branch, req_branch)
 
         else:
              # Admin
              branch_param = request.args.get("branch")
-             if branch_param == "All" or branch_param == "All Branches":
+             if branch_param in ("All", "All Branches"):
                  pass 
              elif branch_param:
                  branch_filter = get_branch_query_filter(Student.branch, branch_param)
@@ -183,6 +182,21 @@ def get_students(current_user):
         )
         results = []
         
+        include_fee_due = request.args.get("include_fee_due") == "true"
+        
+        student_dues_map = {}
+        if include_fee_due and rows:
+            student_ids = [r[0].student_id if h_year else r.student_id for r in rows]
+            if student_ids:
+                dues_query = db.session.query(
+                    StudentFee.student_id, func.sum(StudentFee.due_amount)
+                ).filter(
+                    StudentFee.student_id.in_(student_ids),
+                    StudentFee.is_active == True
+                ).group_by(StudentFee.student_id).all()
+                for sid, total in dues_query:
+                    student_dues_map[sid] = float(total or 0)
+        
         for row in rows:
             try:
                 # Handle tuple vs object
@@ -202,6 +216,9 @@ def get_students(current_user):
                     s = row
                     s_dict = student_to_dict(s)
                     
+                if include_fee_due:
+                    s_dict['total_due'] = float(student_dues_map.get(s_dict["student_id"], 0.0))
+                    
                 results.append(s_dict)
             except Exception as inner_e:
                 print(f"Error processing student row: {inner_e}")
@@ -210,14 +227,21 @@ def get_students(current_user):
         return jsonify({"students": results}), 200
 
     except Exception as e:
+        safe_class_name = locals().get('class_name', 'Unknown')
+        safe_section = locals().get('section', 'Unknown')
+        safe_branch = locals().get('h_branch', 'Unknown')
+        safe_year = locals().get('h_year', 'Unknown')
+        safe_username = getattr(locals().get('current_user'), 'username', 'Unknown')
+        safe_role = getattr(locals().get('current_user'), 'role', 'Unknown')
+        
         logger.error(
             "Error in get_students | class=%s sec=%s branch=%s year=%s user=%s role=%s error=%s",
-            class_name,
-            section,
-            h_branch,
-            h_year,
-            current_user.username,
-            current_user.role,
+            safe_class_name,
+            safe_section,
+            safe_branch,
+            safe_year,
+            safe_username,
+            safe_role,
             str(e),
             exc_info=True,
         )
@@ -327,10 +351,6 @@ def update_student(current_user, student_id):
             'TCNumber': 'TCNumber',
             'PreviousSchoolClass': 'PreviousSchoolClass',
             'AdmissionCategory': 'AdmissionCategory',
-            'SchoolName': 'SchoolName',
-            'PreviousSchoolClass': 'PreviousSchoolClass',
-            'TCNumber': 'TCNumber',
-            'AdmissionNumber': 'AdmissionNumber', 
         }
 
         # Update fields
@@ -352,24 +372,16 @@ def update_student(current_user, student_id):
 
         # -------- DATE FIELDS (SAFE PARSING) --------
         if data.get("dob"):
-            try:
+            with contextlib.suppress(ValueError):
                 student.dob = datetime.strptime(data["dob"], "%Y-%m-%d").date()
-            except:
-                pass
 
         if data.get("Doa"):
-            try:
+            with contextlib.suppress(ValueError):
                 student.Doa = datetime.strptime(data["Doa"], "%Y-%m-%d").date()
-            except:
-                pass
 
         if data.get("admission_date"):
-            try:
-                student.admission_date = datetime.strptime(
-                    data["admission_date"], "%Y-%m-%d"
-                ).date()
-            except:
-                pass
+            with contextlib.suppress(ValueError):
+                student.admission_date = datetime.strptime(data["admission_date"], "%Y-%m-%d").date()
 
         # -------- ADDRESS HANDLING --------
         if data.get("presentAddress"):
@@ -388,10 +400,8 @@ def update_student(current_user, student_id):
                 
             # Save inactivation details
             if data.get("inactivation_date"):
-                try:
+                with contextlib.suppress(ValueError):
                     student.inactivated_date = datetime.strptime(data["inactivation_date"], "%Y-%m-%d")
-                except:
-                    pass
             
             if "inactivation_reason" in data:
                 student.inactivate_reason = data.get("inactivation_reason")
@@ -420,12 +430,10 @@ def update_student(current_user, student_id):
             new_roll = data.get("Roll_Number", student.Roll_Number)
             
             # Find or create academic record for this year
-            record = StudentAcademicRecord.query.filter_by(
+            if record := StudentAcademicRecord.query.filter_by(
                 student_id=student_id,
                 academic_year=year
-            ).first()
-            
-            if record:
+            ).first():
                 # Update existing record
                 record.class_name = new_class
                 record.section = new_section
@@ -497,16 +505,12 @@ def create_student(current_user):
         s.gender = data.get("gender")
         
         if data.get('dob'):
-            try:
+            with contextlib.suppress(Exception):
                 s.dob = datetime.strptime(data['dob'], '%Y-%m-%d').date()
-            except:
-                pass
                 
         if data.get('Doa'):
-            try:
+            with contextlib.suppress(Exception):
                 s.Doa = datetime.strptime(data['Doa'], '%Y-%m-%d').date()
-            except:
-                pass
 
         s.clazz = data.get("class")
         s.section = data.get("section")
@@ -515,10 +519,8 @@ def create_student(current_user):
             s.Roll_Number = int(data.get("Roll_Number"))
             
         if data.get('admission_date'):
-            try:
+            with contextlib.suppress(Exception):
                 s.admission_date = datetime.strptime(data['admission_date'], '%Y-%m-%d').date()
-            except:
-                pass
                 
         s.status = data.get("status", "Active")
         s.branch = data.get("branch")
@@ -608,12 +610,6 @@ def create_student(current_user):
         if data.get("secondaryIncomePerYear"):
             s.secondaryIncomePerYear = float(data.get("secondaryIncomePerYear"))
             
-        s.SchoolName = data.get("SchoolName")
-        s.PreviousSchoolClass = data.get("PreviousSchoolClass")
-        s.TCNumber = data.get("TCNumber")
-        s.AdmissionNumber = data.get("AdmissionNumber")
-
-            
         s.primaryOfficeAddress = data.get("primaryOfficeAddress")
         s.secondaryOfficeAddress = data.get("secondaryOfficeAddress")
         s.Hobbies = data.get("Hobbies")
@@ -641,7 +637,9 @@ def create_student(current_user):
             )
             db.session.add(init_record)
         except Exception as e:
-            print(f"Error creating initial academic record: {e}")
+            logger.error(f"Error creating initial academic record: {e}", exc_info=True)
+            db.session.rollback()
+            return jsonify({"error": f"Failed to create academic record: {str(e)}"}), 500
 
         try:
             auto_enroll_student_fee(s.student_id, s.clazz)
@@ -752,8 +750,7 @@ def upload_students_csv(current_user):
 
         # 2. Validate Against Database (Prevent Overwrites/Conflicts)
         if admission_nos_in_file:
-            existing_students = Student.query.filter(Student.admission_no.in_(admission_nos_in_file)).all()
-            if existing_students:
+            if existing_students := Student.query.filter(Student.admission_no.in_(admission_nos_in_file)).all():
                 found_admissions = [s.admission_no for s in existing_students]
                 return jsonify({"error": f"Admission Numbers already exist in database: {found_admissions}. Import aborted to prevent corruption."}), 400
         # ---------------------------------------------------------
@@ -947,8 +944,7 @@ def promote_students_bulk(current_user):
         # Build a quick lookup: {student_id: Student object}
         student_map = {s.student_id: s for s in students}
         # Identify invalid student_ids (not found)
-        not_found = [sid for sid in student_ids if sid not in student_map]
-        if not_found:
+        if not_found := [sid for sid in student_ids if sid not in student_map]:
             errors.append(f"Students not found: {', '.join(map(str, not_found))}")
 
         # -----------------------------
@@ -975,12 +971,10 @@ def promote_students_bulk(current_user):
                 processed_ids.add(student_id)
 
                 # ---- 4.1 Check Existing Record for Target Year ----
-                existing = StudentAcademicRecord.query.filter_by(
+                if StudentAcademicRecord.query.filter_by(
                     student_id=student_id,
                     academic_year=new_year
-                ).first()
-
-                if existing:
+                ).first():
                     errors.append(f"Student {student.admission_no} already exists in Academic Year {new_year}")
                     continue   # SKIP
 
@@ -990,7 +984,7 @@ def promote_students_bulk(current_user):
                 # ---- 4.X Determine Final Section ----
                 # If target_section is explicitly provided (e.g. "B"), use it.
                 # If target_section is empty (e.g. "All Sec"), keep student's current section (e.g. "A" -> "A").
-                final_section = new_section if new_section else student.section
+                final_section = new_section or student.section
 
                 # ---- 4.3 Create New Academic Record ----
                 new_record = StudentAcademicRecord(
@@ -1023,9 +1017,8 @@ def promote_students_bulk(current_user):
                     )
                     db.session.commit() # Commit fees
                 except Exception as fee_err:
-                    app.logger.warning(f"Fee auto‑enroll failed for {student.admission_no}: {fee_err}")
-                    errors.append(f"Fee enrollment warning for {student.admission_no}: {fee_err}")
-                    # Fee failure is non-blocking for promotion success, already committed promotion.
+                    logger.warning(f"Fee auto‑enroll failed for {student.admission_no}: {fee_err}")
+                    errors.append(f"Fee enrollment warning for {student.admission_no}: {fee_err}")                    # Fee failure is non-blocking for promotion success, already committed promotion.
 
                 success_count += 1
 

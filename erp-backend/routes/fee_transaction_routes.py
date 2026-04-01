@@ -59,10 +59,7 @@ def get_fee_students(current_user):
     )
 
     # STRICT BRANCH SEGREGATION
-    if current_user.role != 'Admin':
-         if current_user.branch != 'All':
-            q = q.filter(Student.branch == current_user.branch)
-    else:
+    if current_user.role == 'Admin':
          # Admins: Check Query Param first, then Header
          branch_param = request.args.get("branch")
          if branch_param and branch_param != "All":
@@ -71,6 +68,8 @@ def get_fee_students(current_user):
              pass # Explicitly show all
          elif h_branch and h_branch != "All":
              q = q.filter(Student.branch == h_branch)
+    elif current_user.branch != 'All':
+         q = q.filter(Student.branch == current_user.branch)
 
     if class_name:
         q = q.filter(StudentAcademicRecord.class_name == class_name) # Use Record's class
@@ -91,45 +90,24 @@ def get_fee_students(current_user):
     q = q.group_by(Student.student_id, StudentAcademicRecord.id) # Group by record too for safety
     rows = q.all()
     
-    output = []
-    
-    for s, record, total, paid, due, concession in rows:
-        total = float(total or 0)
-        paid = float(paid or 0)
-        due = float(due or 0)
-        concession = float(concession or 0)
-        
-        status = (
-            "Paid" if due <= 0 else
-            "Partial" if paid > 0 else
-            "Pending"
-        )
-        
-        # DEBUG PRINT
-        if "Latheef" in f"{s.first_name} {s.last_name}" or "Kareem" in f"{s.first_name} {s.last_name}":
-             print(f"DEBUG: Student {s.student_id} ({s.first_name})")
-             print(f" - FatherName: {s.Fatherfirstname}")
-             print(f" - FatherPhone: {s.FatherPhone}")
-             print(f" - SmsNo: {s.SmsNo}")
-             print(f" - Phone: {s.phone}")
-             print(f" - Branch: {s.branch}")
-             print(f" - Record Class: {record.class_name}")
-
-        output.append({
+    output = [
+        {
             "student_id": s.student_id, 
             "name": f"{s.first_name} {s.last_name}".strip(),
             "fatherName": s.Fatherfirstname,
             "fatherPhone": s.FatherPhone or s.SmsNo or s.phone,
             "admNo": s.admission_no,
             "branch": s.branch,
-            "class": record.class_name, # Historical Class
-            "section": record.section,   # Historical Section
-            "total_fee": total,
-            "paid_amount": paid,
-            "due_amount": due,
-            "concession": concession,
-            "status": status,
-        })
+            "class": record.class_name,
+            "section": record.section,
+            "total_fee": float(total or 0),
+            "paid_amount": float(paid or 0),
+            "due_amount": float(due or 0),
+            "concession": float(concession or 0),
+            "status": "Paid" if float(due or 0) <= 0 else "Partial" if float(paid or 0) > 0 else "Pending",
+        }
+        for s, record, total, paid, due, concession in rows
+    ]
     
     return jsonify(output), 200
 
@@ -170,7 +148,7 @@ def get_student_fees_detail(current_user, student_id):
         
         def sort_key(sf):
             # Primary Sort: Due Date (Earliest first)
-            date_key = sf.due_date if sf.due_date else date(9999, 12, 31)
+            date_key = sf.due_date or date(9999, 12, 31)
             
             # Secondary Determine Title & Installment No for tie-breaking
             title = ""
@@ -231,19 +209,83 @@ def get_student_fees_detail(current_user, student_id):
         return jsonify({"error": str(e)}), 500
 
 
+def _process_fee_allocation(alloc, student, receipt_no, payment_mode, payment_date, note, transaction_details, current_user):
+    amount = Decimal(str(alloc.get("amount", 0)))
+    concession_val = Decimal(str(alloc.get("concession_amount", 0)))
+    if amount <= 0 and concession_val <= 0:
+        return Decimal(0)
+
+    sf = StudentFee.query.get(alloc.get("student_fee_id"))
+    if not sf or not sf.is_active:
+        return Decimal(0)
+
+    sf.paid_amount = (sf.paid_amount or Decimal(0)) + amount
+    sf.concession = (sf.concession or Decimal(0)) + concession_val
+    
+    total_fee = sf.total_fee or Decimal(0)
+    sf.due_amount = max(Decimal(0), total_fee - (sf.paid_amount + sf.concession))
+    sf.status = "Paid" if sf.due_amount <= 0 else "Partial" if sf.paid_amount > 0 else "Pending"
+    
+    inst_id = None
+    if sf.month:
+         if inst := FeeInstallment.query.filter_by(title=sf.month, academic_year=student.academic_year).first():
+             inst_id = inst.id
+
+    fee_type_name = sf.fee_type.feetype if sf.fee_type else "General"
+    final_concession_amount = concession_val
+    
+    if sf.due_amount <= 0:
+        prev_recorded = db.session.query(func.sum(FeePayment.concession_amount))\
+            .filter(
+                FeePayment.student_id == student.student_id,
+                FeePayment.fee_type == fee_type_name,
+                FeePayment.installment_name == (sf.month or "One-Time"),
+                FeePayment.academic_year == student.academic_year
+            ).scalar() or 0
+        
+        unrecorded = (sf.concession or Decimal(0)) - Decimal(prev_recorded) - final_concession_amount
+        if unrecorded > 0:
+            final_concession_amount += unrecorded
+
+    payment_entry = FeePayment(
+        receipt_no=receipt_no,
+        branch=student.branch,
+        location=student.location,
+        academic_year=sf.academic_year or student.academic_year,
+        student_id=student.student_id,
+        class_name=student.clazz,
+        section=student.section,
+        installment_id=inst_id,
+        installment_name=sf.month or "One-Time",
+        fee_type=fee_type_name,
+        gross_amount=total_fee,
+        concession_amount=final_concession_amount,
+        net_payable=total_fee - (Decimal('0') if sf.concession is None else Decimal(str(sf.concession))),
+        amount_paid=amount,
+        due_amount=sf.due_amount,
+        payment_mode=payment_mode,
+        payment_date=payment_date,
+        payment_month=payment_date.month,
+        payment_year=payment_date.year,
+        note=note,
+        TransactionDetails=transaction_details,
+        collected_by=current_user.user_id,
+        collected_by_name=current_user.username 
+    )
+    db.session.add(payment_entry)
+    return amount
+
 @bp.route("/api/fees/payment", methods=["POST"])
 @token_required
 def record_fee_payment(current_user):
     """Record payment with proper status and due amount calculation"""
     data = request.json or {}
     student_id = data.get("student_id")
-    # Handle key mismatches
     allocations = data.get("fee_allocations") or data.get("allocations", [])
     payment_amount = data.get("amount_paid") or data.get("amount")
     
     payment_mode = data.get("payment_mode", "Cash")
     payment_date_str = data.get("payment_date", datetime.now().strftime("%Y-%m-%d"))
-     # Get transaction details
     transaction_id = data.get("transaction_id")
     transaction_id_description = data.get("transaction_id_description")
 
@@ -254,12 +296,10 @@ def record_fee_payment(current_user):
 
     note = data.get("note", "")
     
-    # MANDATORY: Require Academic Year (Fix Issue 5)
     h_year, err, code = require_academic_year()
     if err:
         return err, code
 
-    # Verify Student belongs to user's branch
     if current_user.role != 'Admin':
         student = Student.query.get(student_id)
         if not student or student.branch != current_user.branch:
@@ -273,24 +313,11 @@ def record_fee_payment(current_user):
         if not student:
             return jsonify({"error": "Student not found"}), 404
         
-        #Build Transaction Details from Transaction Id and Transaction Description
-        #transaction_details = f"Transaction ID: {transaction_id}, Transaction Description: {transaction_description}"
-        transaction_details = " "  # Use None instead of empty string for NULL in DB
-        
+        transaction_details = ""
         if transaction_id or transaction_id_description:
-            parts = []
-            if transaction_id:
-                parts.append(transaction_id)
-            if transaction_id_description:
-                parts.append(transaction_id_description)
-            
-            if parts:  # Only set if we have actual data
+            if parts := [p for p in (transaction_id, transaction_id_description) if p]:
                 transaction_details = " / ".join(parts)
-        # 1. GENERATE RECEIPT NUMBER (Step 4)
-        # 1. GENERATE RECEIPT NUMBER (Step 4)
-        # STRICT AUTO GENERATION (Ignore frontend input)
-        
-        # 1. Resolve IDs
+
         ay_id = SequenceService.resolve_academic_year_id(h_year)
         branch_id = SequenceService.resolve_branch_id(student.branch)
         
@@ -299,107 +326,12 @@ def record_fee_payment(current_user):
         if not branch_id:
                 return jsonify({"error": f"Branch {student.branch} not found"}), 400
 
-        # 2. Generate
         receipt_no = SequenceService.generate_receipt_number(branch_id, ay_id, include_prefix=False)
 
-        # 2. PROCESS ALLOCATIONS
-        total_allocated = Decimal(0)
-        
-        for alloc in allocations:
-            sf_id = alloc.get("student_fee_id")
-            amount = Decimal(str(alloc.get("amount", 0)))
-            concession_val = Decimal(str(alloc.get("concession_amount", 0)))
-            
-            if amount <= 0 and concession_val <= 0:
-                continue
-
-            sf = StudentFee.query.get(sf_id)
-            if not sf or not sf.is_active:
-                continue
-
-            # Update StudentFee Record (The Plan)
-            sf.paid_amount = (sf.paid_amount or Decimal(0)) + amount
-            sf.concession = (sf.concession or Decimal(0)) + concession_val
-            
-            # Recalculate Due
-            total_fee = sf.total_fee or Decimal(0)
-            status_paid = sf.paid_amount + sf.concession
-            due = total_fee - status_paid
-            sf.due_amount = max(Decimal(0), due)
-            
-            # Update status
-            if sf.due_amount <= 0:
-                sf.status = "Paid"
-            elif sf.paid_amount > 0:
-                sf.status = "Partial"
-            else:
-                sf.status = "Pending"
-            
-            # 3. INSERT INTO fee_payments (The Truth - Snapshot)
-            inst_id = None
-            if sf.month:
-                 inst = FeeInstallment.query.filter_by(
-                     title=sf.month, 
-                     academic_year=student.academic_year
-                 ).first()
-                 if inst:
-                     inst_id = inst.id
-
-            fee_type_name = sf.fee_type.feetype if sf.fee_type else "General"
-            
-            # --- Fix for Concession Tracking ---
-            # If the fee is fully paid (Due <= 0), ensure any pre-existing concession is recorded
-            # This handles cases where concession was assigned earlier but not recorded in a FeePayment (receipt)
-            
-            final_concession_amount = concession_val
-            
-            if sf.due_amount <= 0:
-                # Calculate total concession recorded so far for this specific fee item
-                prev_recorded = db.session.query(func.sum(FeePayment.concession_amount))\
-                    .filter(
-                        FeePayment.student_id == student.student_id,
-                        FeePayment.fee_type == fee_type_name,
-                        FeePayment.installment_name == (sf.month or "One-Time"),
-                        FeePayment.academic_year == student.academic_year
-                    ).scalar() or 0
-                
-                # Total concession on the StudentFee record
-                total_concession_actual = sf.concession or Decimal(0)
-                
-                # Check for unrecorded concession
-                # We subtract 'final_concession_amount' (current payload) to check what's MISSING
-                unrecorded = total_concession_actual - Decimal(prev_recorded) - final_concession_amount
-                
-                if unrecorded > 0:
-                    final_concession_amount += unrecorded
-
-            payment_entry = FeePayment(
-                receipt_no=receipt_no,
-                branch=student.branch,
-                location=student.location,
-                academic_year=sf.academic_year if sf.academic_year else student.academic_year, # Use Fee's Academic Year!
-                student_id=student.student_id,
-                class_name=student.clazz,
-                section=student.section,
-                installment_id=inst_id,
-                installment_name=sf.month or "One-Time",
-                fee_type=fee_type_name,
-                gross_amount=total_fee,
-                concession_amount=final_concession_amount,
-                net_payable=total_fee - (sf.concession or 0), # Correct snapshot: Total - Total Concession
-                amount_paid=amount,
-                due_amount=sf.due_amount,
-                payment_mode=payment_mode,
-                payment_date=payment_date,
-                payment_month=payment_date.month,
-                payment_year=payment_date.year,
-                note=note,
-                TransactionDetails=transaction_details,
-                collected_by=current_user.user_id,
-                collected_by_name=current_user.username 
-            )
-            db.session.add(payment_entry)
-            total_allocated += amount
+        total_allocated = sum(
+            _process_fee_allocation(alloc, student, receipt_no, payment_mode, payment_date, note, transaction_details, current_user)
+            for alloc in allocations
+        )
         
         db.session.commit()
         
@@ -437,58 +369,38 @@ def get_student_payment_history(current_user, student_id):
             query = query.filter(FeePayment.status == 'A')
         
         if h_year:
-            # We want payments that are EITHER tagged with h_year OR tagged with NULL (Legacy)
-            # OR payments that paid for a fee belonging to h_year (even if payment is tagged differently)
-            
-            # Find fee types/installments belonging to this academic year for this student
             relevant_fees = db.session.query(StudentFee.month, FeeType.feetype)\
                 .join(FeeType)\
                 .filter(StudentFee.student_id == student_id, StudentFee.academic_year == h_year)\
                 .all()
             
-            # Create a set of (installment, fee_type) tuples
-            # Note: fee_payment.installment_name matches student_fee.month (or "One-Time")
-            relevant_keys = []
-            for month, ftype in relevant_fees:
-                inst_name = month if month else "One-Time"
-                relevant_keys.append((inst_name, ftype))
-                
-            # Ideally we'd do this in SQL, but for simplicity and cross-DB support:
-            # We'll fetch slightly more and filter in Python, or construct a complex OR condition.
-            # Given the volume per student is low, Python filtering is fine, BUT pagination would suffer.
-            # Let's try to do it in SQL.
+            relevant_keys = [(month or "One-Time", ftype) for month, ftype in relevant_fees]
             
             conditions = [FeePayment.academic_year == h_year, FeePayment.academic_year.is_(None)]
             
             if relevant_keys:
-                # Add condition: (installment_name, fee_type) IN relevant_keys
-                # SQLAlchemy doesn't support tuple IN easily across all DBs.
-                # So we use OR of ANDs
-                for inst, ftype in relevant_keys:
-                    conditions.append(and_(FeePayment.installment_name == inst, FeePayment.fee_type == ftype))
+                conditions.extend(and_(FeePayment.installment_name == inst, FeePayment.fee_type == ftype) for inst, ftype in relevant_keys)
             
             query = query.filter(or_(*conditions))
             
         payments = query.order_by(FeePayment.payment_date.desc(), FeePayment.id.desc()).all()
         
-        output = []
-        for p in payments:
-            output.append({
-                "payment_id": p.id,
-                "receipt_no": p.receipt_no,
-                "academic_year": p.academic_year,
-                "payment_date": p.payment_date.isoformat() if p.payment_date else None,
-                "amount_paid": str(p.amount_paid),
-                "concession_amount": str(p.concession_amount),
-                "gross_amount": str(p.gross_amount),
-                "due_amount": str(p.due_amount),
-                "fee_type": p.fee_type,
-                "installment": p.installment_name,
-                "mode": p.payment_mode,
-                "collected_by": p.collected_by_name,
-                "status": p.status,
-                "cancel_reason": p.cancel_reason
-            })
+        output = [{
+            "payment_id": p.id,
+            "receipt_no": p.receipt_no,
+            "academic_year": p.academic_year,
+            "payment_date": p.payment_date.isoformat() if p.payment_date else None,
+            "amount_paid": str(p.amount_paid),
+            "concession_amount": str(p.concession_amount),
+            "gross_amount": str(p.gross_amount),
+            "due_amount": str(p.due_amount),
+            "fee_type": p.fee_type,
+            "installment": p.installment_name,
+            "mode": p.payment_mode,
+            "collected_by": p.collected_by_name,
+            "status": p.status,
+            "cancel_reason": p.cancel_reason
+        } for p in payments]
             
         return jsonify(output), 200
     except Exception as e:
@@ -538,9 +450,7 @@ def delete_fee_payment(current_user, payment_id):
         else:
              sf_query = sf_query.filter(StudentFee.month == payment.installment_name)
              
-        sf = sf_query.first()
-        
-        if sf:
+        if sf := sf_query.first():
             # Revert amounts
             sf.paid_amount = (sf.paid_amount or Decimal(0)) - payment.amount_paid
             sf.concession = (sf.concession or Decimal(0)) - (payment.concession_amount or Decimal(0))
@@ -597,8 +507,7 @@ def assign_special_fee(current_user):
 
         # Validate Access
         if current_user.role != 'Admin' and current_user.branch != 'All':
-            unauthorized_ids = [sid for sid, s in student_map.items() if s.branch != current_user.branch]
-            if unauthorized_ids:
+            if unauthorized_ids := [sid for sid, s in student_map.items() if s.branch != current_user.branch]:
                 return jsonify({"error": "Unauthorized access to some students"}), 403
 
         # Process Assignments
@@ -790,6 +699,43 @@ def delete_student_fee(current_user, fee_id):
         return jsonify({"error": str(e)}), 500
 
 
+def _calculate_concession(payable, rule):
+    return payable * (rule.percentage / Decimal(100)) if rule.is_percentage else min(payable, rule.percentage)
+
+def _update_sf_with_concession(sf, rule):
+    payable = sf.total_fee or Decimal(0)
+    amount = _calculate_concession(payable, rule)
+    sf.concession = amount
+    sf.due_amount = max(Decimal(0), payable - amount)
+    sf.status = "Paid" if sf.due_amount <= 0 else "Pending"
+
+def _apply_concession_to_sf(fee_id, student_id, rule_map):
+    sf = StudentFee.query.get(fee_id)
+    if not sf or not sf.is_active or sf.student_id != student_id:
+        return 0
+    if sf.paid_amount and sf.paid_amount > 0:
+        return 0
+    if rule := rule_map.get(sf.fee_type_id):
+        _update_sf_with_concession(sf, rule)
+        return 1
+    return 0
+
+def _get_concession_rule_map(concession_title, academic_year, student_branch):
+    c_query = Concession.query.filter_by(title=concession_title, academic_year=academic_year)
+    rules_all = c_query.all()
+    relevant_rules = [r for r in rules_all if r.branch in ("All", student_branch)]
+    
+    rule_map = {}
+    for r in relevant_rules:
+        if r.fee_type_id in rule_map:
+            existing = rule_map[r.fee_type_id]
+            if existing.branch == "All" and r.branch != "All":
+                rule_map[r.fee_type_id] = r 
+        else:
+            rule_map[r.fee_type_id] = r
+            
+    return rule_map
+
 @bp.route("/api/fees/assign-concession", methods=["POST"])
 @token_required
 def assign_concession(current_user):
@@ -813,74 +759,13 @@ def assign_concession(current_user):
              return jsonify({"error": "Unauthorized"}), 403
              
         # 2. Fetch Concession Template (All items for this title)
-        # Handle Branch logic for Concession
-        c_query = Concession.query.filter_by(title=concession_title, academic_year=academic_year)
-        
-        # If admin, can see all. If branch user, can see Global (All) or Own.
-        rules_all = c_query.all()
-        
-        # Filter rules relevant to student
-        # Rules that are 'All' or match Student's Branch
-        relevant_rules = [r for r in rules_all if r.branch == "All" or r.branch == student.branch]
-        
-        # Map fee_type_id -> Concession Object
-        rule_map = {}
-        for r in relevant_rules:
-            # If we already have a rule for this fee_type, prefer Specific Branch over "All"
-            if r.fee_type_id in rule_map:
-                existing = rule_map[r.fee_type_id]
-                if existing.branch == "All" and r.branch != "All":
-                    rule_map[r.fee_type_id] = r 
-            else:
-                rule_map[r.fee_type_id] = r
+        rule_map = _get_concession_rule_map(concession_title, academic_year, student.branch)
                 
         if not rule_map:
              return jsonify({"error": "No Concession Rules found for this title/year/branch"}), 404
              
         # 3. Process Installments
-        updated_count = 0
-        
-        for fee_id in installments:
-            sf = StudentFee.query.get(fee_id)
-            if not sf or not sf.is_active: 
-                continue
-                
-            # Integrity check
-            if sf.student_id != student_id:
-                continue
-                
-            # Validation: Don't edit Paid fees (Partial is tricky, let's block for safety)
-            if (sf.paid_amount and sf.paid_amount > 0) or (sf.concession and sf.concession > 0):
-                # We skip if already paid OR already has concession (to prevent overwrite/stacking without logic)
-                # But wait, logic might want overwrite?
-                # User flow usually is: Remove old concession, add new.
-                # Just skip if paid. If has concession, we overwrite?
-                # Frontend blocks if has concession. Backend should strictly block Paid.
-                pass
-            
-            if (sf.paid_amount and sf.paid_amount > 0):
-                 continue
-
-            rule = rule_map.get(sf.fee_type_id)
-            if rule:
-                # Calculate Concession Amount
-                payable = sf.total_fee or Decimal(0)
-                amount = Decimal(0)
-                
-                if rule.is_percentage:
-                    amount = payable * (rule.percentage / Decimal(100))
-                else:
-                    amount = min(payable, rule.percentage)
-                    
-                sf.concession = amount
-                
-                # Recalculate Due
-                sf.due_amount = max(Decimal(0), payable - amount) # paid is 0
-                sf.status = "Pending" 
-                if sf.due_amount <= 0:
-                     sf.status = "Paid" # Technically paid via concession
-                     
-                updated_count += 1
+        updated_count = sum(_apply_concession_to_sf(fee_id, student_id, rule_map) for fee_id in installments)
                 
         db.session.commit()
         return jsonify({"message": f"Concession assigned to {updated_count} installments"}), 200
@@ -931,21 +816,13 @@ def assign_fee_type(current_user):
         selected_struct = None
         
         # Filter for best match
-        # 1. Exact Branch Match
-        for s in structs:
-            if s.branch == student.branch:
-                selected_struct = s
-                break
-        
-        # 2. If no exact, try 'All' branch
-        if not selected_struct:
-            for s in structs:
-                if s.branch == "All":
-                    selected_struct = s
-                    break
+        # 1. Exact Branch Match or 'All' branch
+        selected_struct = next((s for s in structs if s.branch == student.branch), None) or next((s for s in structs if s.branch == "All"), None)
         
         if selected_struct:
-             assign_fee_to_student(student.student_id, selected_struct, is_student_new=False)
+             # Pass is_student_new=True to bypass the restriction on 'isnewadmission' fees 
+             # because the user explicitly requested to assign this fee manually.
+             assign_fee_to_student(student.student_id, selected_struct, is_student_new=True)
              db.session.commit()
              return jsonify({"message": "Fee assigned based on structure"}), 201
         else:
@@ -1011,6 +888,37 @@ def nullify_student_fees(current_user, student_id):
 
         db.session.commit()
         return jsonify({"message": f"Fee structure nullified successfully. {count} installment(s) zeroed out.", "nullified": count}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/api/fees/student/<int:student_id>/assign-standard", methods=["POST"])
+@token_required
+def assign_standard_fees(current_user, student_id):
+    """Assign standard class fees to a student."""
+    try:
+        h_year, err, code = require_academic_year()
+        if err:
+            return err, code
+
+        student = Student.query.get(student_id)
+        if not student:
+            return jsonify({"error": "Student not found"}), 404
+
+        if current_user.role != 'Admin' and current_user.branch != 'All' and student.branch != current_user.branch:
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from helpers import auto_enroll_student_fee
+        # Call auto_enroll_student_fee which automatically assigns ClassFeeStructure skipping already existing fee_types
+        # We pass is_student_new=False so that fees strictly targetting "new admissions" are skipped unless intended.
+        # This matches the requirement of assigning standard types like tuition fee.
+        auto_enroll_student_fee(student_id, student.clazz, h_year, is_student_new=False)
+        db.session.commit()
+
+        return jsonify({"message": "Standard fees assigned successfully."}), 200
 
     except Exception as e:
         db.session.rollback()

@@ -83,7 +83,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
       );
     }
 
-    const grades = ['E', 'D', 'C', 'B2', 'B1', 'A2', 'A1'];
+    const grades = ['E', 'D', 'C2', 'C1', 'B2', 'B1', 'A2', 'A1'];
 
     return (
       <div className="overflow-x-auto">

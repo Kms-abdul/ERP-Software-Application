@@ -248,7 +248,7 @@ const CreateStudent: React.FC<CreateStudentProps> = ({
     class: "",
     section: "",
     Roll_Number: "",
-    admission_date: "",
+    admission_date: new Date().toISOString().split('T')[0],
     status: "Active",
     MotherTongue: "",
     Caste: "",
@@ -328,10 +328,7 @@ const CreateStudent: React.FC<CreateStudentProps> = ({
 
   const [formData, setFormData] = useState<Record<string, any>>(initialFormData);
 
-  // DEBUGVARS (Safe to assume studentData exists if referenced inside useEffect, but here at top level?)
-  // No, studentData is a prop. Accessing it here is fine.
-  const debugBranch = studentData?.branch || "UNDEFINED";
-  const formBranch = formData.branch || "EMPTY";
+
 
   // Helper to derive location from branch name
   const deriveLocationFromBranch = (branchName: string, branches: any[], availableLocations: any[]) => {
@@ -358,16 +355,6 @@ const CreateStudent: React.FC<CreateStudentProps> = ({
 
   // Documents
   const [checkedDocuments, setCheckedDocuments] = useState<string[]>([]);
-  const documentTypes = [
-    "Birth Certificate",
-    "Aadhar Card",
-    "Previous Marksheet",
-    "Transfer Certificate",
-    "Character Certificate",
-    "Caste Certificate",
-    "Address Proof",
-    "Passport Photo",
-  ];
 
   // Load student data for edit/view
   useEffect(() => {
@@ -523,10 +510,8 @@ const CreateStudent: React.FC<CreateStudentProps> = ({
             if (savedBranch && !isAllBranch) {
               targetBranch = savedBranch;
             }
-          } else {
-            if (userBranch) {
-              targetBranch = userBranch;
-            }
+          } else if (userBranch) {
+            targetBranch = userBranch;
           }
 
           if (!targetBranch && !isAllBranch) {
@@ -595,7 +580,7 @@ const CreateStudent: React.FC<CreateStudentProps> = ({
 
       // Checkbox logic
       if (type === "checkbox") {
-        const checked = (e.target as HTMLInputElement).checked;
+        const { checked } = e.target as HTMLInputElement;
 
         setFormData((prev) => {
           const updated = { ...prev, [name]: checked };
@@ -694,11 +679,7 @@ const CreateStudent: React.FC<CreateStudentProps> = ({
   );
 
 
-  const handleDocumentCheck = (doc: string) => {
-    setCheckedDocuments((prev) =>
-      prev.includes(doc) ? prev.filter((d) => d !== doc) : [...prev, doc]
-    );
-  };
+
 
   const handlePhotoChange = (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -841,8 +822,8 @@ const CreateStudent: React.FC<CreateStudentProps> = ({
         !formData.section ||
         !formData.Fatherfirstname ||
         !formData.FatherPhone ||
-        !formData.Motherfirstname||
-        !formData.SchoolName||
+        !formData.Motherfirstname ||
+        !formData.SchoolName ||
         !formData.PreviousSchoolClass)
     ) {
       alert("Fill required fields");
@@ -931,7 +912,7 @@ const CreateStudent: React.FC<CreateStudentProps> = ({
               disabled={isViewMode}
             >
               <option value="">-- Select --</option>
-               {sectionList.map((section) => (
+              {sectionList.map((section) => (
                 <option key={section} value={section}>
                   {section}
                 </option>
@@ -952,7 +933,7 @@ const CreateStudent: React.FC<CreateStudentProps> = ({
               required
               value={formData.admission_date}
               onChange={handleInputChange}
-              disabled={isViewMode}
+              disabled={true}
             />
             <FormField
               label="Roll Number"

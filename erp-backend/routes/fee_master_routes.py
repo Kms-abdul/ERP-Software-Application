@@ -36,8 +36,6 @@ def get_fee_types(current_user):
         # Strict Branch Filter: Show ONLY fees for this branch + Global "All" fees
         # (Assuming "All" fee types are visible to everyone)
         query = query.filter(or_(FeeType.branch == h_branch, FeeType.branch == "All"))
-    elif current_user.role == 'Admin' and h_branch == "All":
-        pass # Show all
         
     fee_types = query.all()
     return jsonify({
@@ -66,13 +64,11 @@ def create_fee_type(current_user):
         
     try:
         # Check for duplicates (Name + Branch + Year)
-        existing = FeeType.query.filter_by(
+        if existing := FeeType.query.filter_by(
             feetype=feetype_name, 
             branch=branch, 
             academic_year=academic_year
-        ).first()
-        
-        if existing:
+        ).first():
             return jsonify({"error": f"Fee Type '{feetype_name}' already exists for {branch} ({academic_year})"}), 400
 
         new_ft = FeeType(
@@ -106,7 +102,7 @@ def update_fee_type(current_user, id):
         
     # Validation: Only Admin or Owner Branch can edit
     if current_user.role != 'Admin':
-         if ft.branch != "All" and ft.branch != current_user.branch:
+         if ft.branch not in ("All", current_user.branch):
              return jsonify({"error": "Unauthorized"}), 403
          if ft.branch == "All":
              return jsonify({"error": "Only Admin can edit Global Fee Types"}), 403
@@ -179,22 +175,15 @@ def get_class_fee_structure(current_user):
     if class_name:
         query = query.filter_by(clazz=class_name)
     
-    # STRICT BRANCH SEGREGATION
-    if current_user.role != 'Admin':
-         if current_user.branch != 'All':
-              query = query.filter_by(branch=current_user.branch)
-    else:
-         # Admins: Check Header
-         if h_branch and h_branch != "All":
-             query = query.filter_by(branch=h_branch)
-
-    # FIX: Strict Year Filter
-    query = query.filter_by(academic_year=h_year)
-        
-    branch = request.args.get('branch')
+    # STRICT BRANCH SEGREGATION AND FILTERING
+    branch_arg = request.args.get('branch')
     location_param = request.args.get('location') # New param
-    target_branch = branch if  branch else h_branch # Explicit arg takes precedence
-
+    
+    if current_user.role != 'Admin':
+        target_branch = current_user.branch
+    else:
+        target_branch = branch_arg or h_branch or "All"
+        
     if target_branch and target_branch != "All":
         query = query.filter_by(branch=target_branch)
     elif target_branch == "All":
@@ -203,25 +192,26 @@ def get_class_fee_structure(current_user):
         if location_param and location_param not in ["All", "All Locations"]:
             query = query.filter_by(location=location_param)
 
-    results = []
-    for fs in query.all():
-        results.append({
-            "id": fs.id,
-            "class": fs.clazz,
-            "fee_type_id": fs.feetypeid,
-            "fee_type_name": fs.feetype.feetype if fs.feetype else None,
-            "academic_year": fs.academicyear, 
-            "total_amount": float(fs.totalamount or 0),
-            "monthly_amount": float(fs.monthly_amount or 0),
-            "installments_count": fs.installments_count,
-            "is_new_admission": fs.isnewadmission,
-            "fee_group": fs.feegroup,
-            "created_at": fs.created_at.isoformat() if fs.created_at else None,
-            "updated_at": fs.updated_at.isoformat() if fs.updated_at else None,
-            "created_by": fs.created_by,
-            "updated_by": fs.updated_by,
-            "installments": generate_installments(fs)
-        })
+    # FIX: Strict Year Filter
+    query = query.filter_by(academic_year=h_year)
+
+    results = [{
+        "id": fs.id,
+        "class": fs.clazz,
+        "fee_type_id": fs.feetypeid,
+        "fee_type_name": fs.feetype.feetype if fs.feetype else None,
+        "academic_year": fs.academicyear, 
+        "total_amount": float(fs.totalamount or 0),
+        "monthly_amount": float(fs.monthly_amount or 0),
+        "installments_count": fs.installments_count,
+        "is_new_admission": fs.isnewadmission,
+        "fee_group": fs.feegroup,
+        "created_at": fs.created_at.isoformat() if fs.created_at else None,
+        "updated_at": fs.updated_at.isoformat() if fs.updated_at else None,
+        "created_by": fs.created_by,
+        "updated_by": fs.updated_by,
+        "installments": generate_installments(fs)
+    } for fs in query.all()]
     return jsonify({"fee_structures": results}), 200
 
 @bp.route("/api/admin/migrate-class-fee-structures", methods=["POST"])
@@ -235,7 +225,7 @@ def migrate_class_fee_structures(current_user):
         
     try:
         structs = ClassFeeStructure.query.filter(
-            (ClassFeeStructure.academic_year == None) | (ClassFeeStructure.academic_year == "")
+            ClassFeeStructure.academic_year.is_(None) | (ClassFeeStructure.academic_year == "")
         ).all()
         
         count = 0
@@ -250,6 +240,31 @@ def migrate_class_fee_structures(current_user):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+def _auto_assign_students_bulk(fs, is_new_admission):
+    if is_new_admission:
+        return
+    students_query = Student.query.filter_by(clazz=fs.clazz)
+    
+    if fs.branch and fs.branch != "All":
+        students_query = students_query.filter_by(branch=fs.branch)
+    elif fs.branch == "All" and fs.location and fs.location not in ["All", "All Locations"]:
+        # Optimization: Filter students by Location if Branch is All
+        if loc_master := OrgMaster.query.filter_by(display_name=fs.location, master_type='LOCATION').first():
+             students_query = students_query.join(Branch, Student.branch == Branch.branch_name)\
+                                            .filter(Branch.location_code == loc_master.code)
+
+    # Strict Academic Year Match
+    if fs.academic_year:
+        students_query = students_query.filter_by(academic_year=fs.academic_year)
+    
+    students = students_query.all()
+    print(f"DEBUG: Found {len(students)} students in Class {fs.clazz} (Branch: {fs.branch}) for auto-assignment.")
+    
+    for s in students:
+        if fs.branch and fs.branch != "All" and s.branch != fs.branch:
+            continue
+        assign_fee_to_student(s.student_id, fs, is_student_new=False)
 
 @bp.route("/api/class-fee-structure", methods=["POST"])
 @token_required
@@ -315,29 +330,7 @@ def create_class_fee_structure(current_user):
             created_ids.append(fs.id)
             
             # AUTO ASSIGN TO EXISTING STUDENTS
-            if not is_new_admission:
-                students_query = Student.query.filter_by(clazz=fs.clazz)
-                
-                if fs.branch and fs.branch != "All":
-                    students_query = students_query.filter_by(branch=fs.branch)
-                elif fs.branch == "All" and fs.location and fs.location not in ["All", "All Locations"]:
-                    # Optimization: Filter students by Location if Branch is All
-                    loc_master = OrgMaster.query.filter_by(display_name=fs.location, master_type='LOCATION').first()
-                    if loc_master:
-                         students_query = students_query.join(Branch, Student.branch == Branch.branch_name)\
-                                                        .filter(Branch.location_code == loc_master.code)
-
-                # Strict Academic Year Match
-                if fs.academic_year:
-                    students_query = students_query.filter_by(academic_year=fs.academic_year)
-                
-                students = students_query.all()
-                print(f"DEBUG: Found {len(students)} students in Class {fs.clazz} (Branch: {fs.branch}) for auto-assignment.")
-                
-                for s in students:
-                    if fs.branch and fs.branch != "All" and s.branch != fs.branch:
-                        continue
-                    assign_fee_to_student(s.student_id, fs, is_student_new=False)
+            _auto_assign_students_bulk(fs, is_new_admission)
 
         try:
             db.session.commit()
@@ -357,12 +350,13 @@ def delete_class_fee_structure(current_user, id):
         if not fs:
             return jsonify({"error": "Fee structure not found"}), 404
             
+        from sqlalchemy.sql.expression import true
         assigned_count = StudentFee.query.join(Student).filter(
             StudentFee.fee_type_id == fs.feetypeid,
             StudentFee.academic_year == fs.academic_year, 
             StudentFee.is_active == True,
             Student.clazz == fs.clazz,
-            Student.branch == fs.branch if fs.branch != 'All' else True 
+            Student.branch == fs.branch if fs.branch != 'All' else true() 
         ).count()
         
         if assigned_count > 0:
@@ -404,8 +398,9 @@ def get_concessions(current_user):
     grouped = {}
     for c in concessions:
         key = (c.title, c.academic_year)
-        if key not in grouped:
-            grouped[key] = {
+        grouped.setdefault(
+            key,
+            {
                 "title": c.title,
                 "description": c.description,
                 "academic_year": c.academic_year,
@@ -414,8 +409,7 @@ def get_concessions(current_user):
                 "show_in_payment": c.show_in_payment,
                 "items": []
             }
-        
-        grouped[key]["items"].append({
+        )["items"].append({
             "id": c.id,
             "fee_type_id": c.fee_type_id,
             "fee_type_name": c.fee_type.feetype if c.fee_type else "Unknown",
@@ -448,8 +442,7 @@ def create_concession(current_user):
         return jsonify({"error": "Title and Academic Year are required"}), 400
         
     try:
-        existing = Concession.query.filter_by(title=title, academic_year=academic_year, branch=branch).first()
-        if existing:
+        if existing := Concession.query.filter_by(title=title, academic_year=academic_year, branch=branch).first():
             return jsonify({"error": f"Concession '{title}' already exists for {academic_year} in {branch} branch"}), 400
             
         created_ids = []
@@ -526,12 +519,7 @@ def update_concession(current_user, original_title, original_year):
         query = Concession.query.filter_by(title=original_title, academic_year=original_year)
         
         if current_user.role != 'Admin':
-             check = query.filter_by(branch=new_branch).count()
-             if check == 0:
-                  pass 
              query = query.filter_by(branch=new_branch)
-        else:
-             pass 
 
         deleted = query.delete()
         if deleted == 0 and current_user.role != 'Admin':
@@ -574,7 +562,7 @@ def get_installments(current_user):
         if err:
             return err, code
         
-        target_branch = branch if branch else h_branch
+        target_branch = branch or h_branch
         
         query = FeeInstallment.query
         
@@ -585,10 +573,8 @@ def get_installments(current_user):
              from sqlalchemy import or_, and_
              
              branch_loc_name = get_default_location() 
-             branch_obj = Branch.query.filter_by(branch_name=target_branch).first()
-             if branch_obj:
-                 loc_master = OrgMaster.query.filter_by(code=branch_obj.location_code, master_type='LOCATION').first()
-                 if loc_master:
+             if branch_obj := Branch.query.filter_by(branch_name=target_branch).first():
+                 if loc_master := OrgMaster.query.filter_by(code=branch_obj.location_code, master_type='LOCATION').first():
                      branch_loc_name = loc_master.display_name
              
              query = query.filter(
@@ -597,7 +583,7 @@ def get_installments(current_user):
                      and_(
                          FeeInstallment.branch == "All",
                          or_(
-                             FeeInstallment.location == None,
+                             FeeInstallment.location.is_(None),
                              FeeInstallment.location == "All",
                              FeeInstallment.location == "All Locations",
                              FeeInstallment.location == branch_loc_name
@@ -643,19 +629,26 @@ def create_installment(current_user):
     try:
         # Require Academic Year from Payload OR Header
         # If payload has it, good. If not, check header.
-        payload_year = data.get("academic_year")
+        if isinstance(data, list):
+            payload_year = data[0].get("academic_year") if data else None
+        else:
+            payload_year = data.get("academic_year")
         
         # Helper check
         h_year, err, code = require_academic_year()
         
         # Logic: Prefer payload, fallback to header, fallback to ERROR (no hardcode)
-        target_year = payload_year if payload_year else h_year
+        target_year = payload_year or h_year
         
         if not target_year:
              return jsonify({"error": "Academic Year is required"}), 400
 
-        target_branch = data.get("branch", "All")
-        target_location = data.get("location") 
+        if isinstance(data, list):
+            target_branch = "All"
+            target_location = None
+        else:
+            target_branch = data.get("branch", "All")
+            target_location = data.get("location") 
 
         # Bulk creation
         if isinstance(data, list):
@@ -681,7 +674,7 @@ def create_installment(current_user):
                     fee_type_id=item.get("fee_type_id"),
                     branch=item.get("branch"),
                     location=item.get("location"),
-                    academic_year=item.get("academic_year")
+                    academic_year=item_year
                 )
                 db.session.add(new_inst)
                 db.session.flush()
@@ -821,12 +814,10 @@ def copy_class_fee_structure(current_user):
         s_br = Branch.query.filter_by(id=source_branch_id).first()
         if s_br:
              source_branch_name = s_br.branch_name
+        elif isinstance(source_branch_id, str) and not source_branch_id.isdigit():
+             source_branch_name = source_branch_id
         else:
-             # Fallback: maybe it's already a name?
-             if isinstance(source_branch_id, str) and not source_branch_id.isdigit():
-                 source_branch_name = source_branch_id
-             else:
-                 return jsonify({"error": "Source branch not found"}), 404
+             return jsonify({"error": "Source branch not found"}), 404
 
         # 2. Fetch Source Fee Structure
         source_fees = ClassFeeStructure.query.filter_by(
@@ -842,10 +833,8 @@ def copy_class_fee_structure(current_user):
         target_branches = Branch.query.filter(Branch.id.in_(target_branch_ids)).all()
         
         # Location Helper
-        loc_map = {}
         all_locs = OrgMaster.query.filter_by(master_type='LOCATION').all()
-        for l in all_locs:
-            loc_map[l.code] = l.display_name
+        loc_map = {l.code: l.display_name for l in all_locs}
             
         copied_count = 0
         skipped_count = 0
@@ -867,21 +856,17 @@ def copy_class_fee_structure(current_user):
                 if src_ft.branch == 'All':
                      # Global Fee Type: Valid for everyone
                      target_ft_id = src_ft.id
-                else:
-                     # Branch-Specific: Check if Target has a Fee Type with SAME NAME
-                     target_ft_obj = FeeType.query.filter_by(
+                elif target_ft_obj := FeeType.query.filter_by(
                          feetype=src_ft.feetype,
                          branch=t_branch_name,
                          academic_year=academic_year
-                     ).first()
-                     
-                     if target_ft_obj:
-                         target_ft_id = target_ft_obj.id
-                     else:
-                         # VALIDATION FAILED: Target missing required fee type
-                         skipped_validation_count += 1
-                         print(f"[SKIP] Target {t_branch_name} missing fee type '{src_ft.feetype}'")
-                         continue
+                     ).first():
+                     target_ft_id = target_ft_obj.id
+                else:
+                     # VALIDATION FAILED: Target missing required fee type
+                     skipped_validation_count += 1
+                     print(f"[SKIP] Target {t_branch_name} missing fee type '{src_ft.feetype}'")
+                     continue
 
                 # --- VALIDATION 2: Installment Count Match ---
                 if src_fee.installments_count > 0:
@@ -1066,10 +1051,8 @@ def copy_installments(current_user):
         target_branches = Branch.query.filter(Branch.id.in_(target_branch_ids)).all()
         
         # Helper for locations
-        loc_map = {}
         all_locs = OrgMaster.query.filter_by(master_type='LOCATION').all()
-        for l in all_locs:
-            loc_map[l.code] = l.display_name
+        loc_map = {l.code: l.display_name for l in all_locs}
             
         copied_batches = 0
         skipped_batches = 0
@@ -1084,15 +1067,11 @@ def copy_installments(current_user):
                 feetype=fee_type_name,
                 branch=t_branch_name,
                 academic_year=academic_year
+            ).first() or FeeType.query.filter_by(
+                feetype=fee_type_name,
+                branch='All',
+                academic_year=academic_year
             ).first()
-            
-            if not target_ft:
-                # Try Global
-                target_ft = FeeType.query.filter_by(
-                    feetype=fee_type_name,
-                    branch='All',
-                    academic_year=academic_year
-                ).first()
                 
             if not target_ft:
                 errors.append(f"Target '{t_branch_name}' missing fee type '{fee_type_name}'")
@@ -1182,10 +1161,8 @@ def copy_concessions(current_user):
         target_branches = Branch.query.filter(Branch.id.in_(target_branch_ids)).all()
         
         # Helper for locations
-        loc_map = {}
         all_locs = OrgMaster.query.filter_by(master_type='LOCATION').all()
-        for l in all_locs:
-            loc_map[l.code] = l.display_name
+        loc_map = {l.code: l.display_name for l in all_locs}
             
         copied_count = 0
         skipped_count = 0
@@ -1227,15 +1204,11 @@ def copy_concessions(current_user):
                         feetype=ft_name,
                         branch=t_branch_name,
                         academic_year=academic_year
+                    ).first() or FeeType.query.filter_by(
+                        feetype=ft_name,
+                        branch='All',
+                        academic_year=academic_year
                     ).first()
-                    
-                    if not target_ft:
-                         # Try Global
-                        target_ft = FeeType.query.filter_by(
-                            feetype=ft_name,
-                            branch='All',
-                            academic_year=academic_year
-                        ).first()
                     
                     if not target_ft:
                         # Skip this specific fee type link if target doesn't have it

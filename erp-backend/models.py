@@ -312,7 +312,7 @@ class Concession(db.Model, AuditMixin):
     branch = db.Column(db.String(50))
     academic_year = db.Column(db.String(20))
     fee_type_id = db.Column(db.Integer, db.ForeignKey("feetypes.id"))
-    percentage = db.Column(db.Numeric(5, 2)) # The value, e.g., 50.00
+    percentage = db.Column(db.Numeric(10, 2)) # The value, e.g., 50.00 or flat amount like 1500
     is_percentage = db.Column(db.Boolean, default=True) # Flag: True=%, False=Flat Amount
     show_in_payment = db.Column(db.Boolean, default=False) # Flag: Show in Fee Payment dropdown
     

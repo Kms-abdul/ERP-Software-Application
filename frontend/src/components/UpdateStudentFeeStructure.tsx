@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
-import { PencilIcon, TrashIcon, RefreshIcon, PlusIcon } from './icons';
+import { PencilIcon, TrashIcon, RefreshIcon } from './icons';
 
 interface FeeInstallment {
     sr: number;
@@ -8,7 +8,7 @@ interface FeeInstallment {
     title: string;
     payable: number;
     paid: boolean;
-    paidAmount: number; 
+    paidAmount: number;
     dueAmount: number;
     concession: number;
     month: string;
@@ -29,6 +29,7 @@ interface FeeType {
     id: number;
     fee_type: string;
     type: string;
+    fee_type_group?: string;
 }
 
 const UpdateStudentFeeStructure: React.FC = () => {
@@ -36,7 +37,7 @@ const UpdateStudentFeeStructure: React.FC = () => {
     // State
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedClass, setSelectedClass] = useState('');
-    const [selectedSection, setSelectedSection] = useState('');
+
     // const [selectedBranch, setSelectedBranch] = useState('All'); // Removed
     const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
 
@@ -49,26 +50,31 @@ const UpdateStudentFeeStructure: React.FC = () => {
     // UI State
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingFee, setEditingFee] = useState<FeeInstallment | null>(null);
-    const [isAdmin, setIsAdmin] = useState(false);
-    // const [isBranchLocked, setIsBranchLocked] = useState(false); // Removed
 
-    // Load initial data
+
+    const [showAssignStandardModal, setShowAssignStandardModal] = useState(false);
+
+    // No need to set branch state, we read from localStorage
+
     useEffect(() => {
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        setIsAdmin(user.role === 'Admin');
-
-        // No need to set branch state, we read from localStorage
-
         fetchClasses();
         fetchFeeTypes();
     }, []);
+
+    const computeGlobalBranch = (): string => {
+        let user: Record<string, any> = {};
+        try { user = JSON.parse(localStorage.getItem('user') || '{}'); } catch { user = {}; }
+        const storedBranch = localStorage.getItem('currentBranch') || 'All';
+        if (user.role !== 'Admin' && user.branch) return user.branch;
+        return storedBranch;
+    };
 
     // Fetch Students on filter change
     useEffect(() => {
         if (selectedClass || searchTerm) {
             fetchStudents();
         }
-    }, [selectedClass, selectedSection, searchTerm]); // Removed selectedBranch dependency
+    }, [selectedClass, searchTerm]); // Removed selectedBranch dependency
 
     // Fetch Installments when student selected
     useEffect(() => {
@@ -102,16 +108,9 @@ const UpdateStudentFeeStructure: React.FC = () => {
         try {
             const params = new URLSearchParams();
             if (selectedClass) params.append('class', selectedClass);
-            if (selectedSection) params.append('section', selectedSection);
             if (searchTerm) params.append('search', searchTerm);
 
-            const user = JSON.parse(localStorage.getItem('user') || '{}');
-            let globalBranch = localStorage.getItem('currentBranch') || 'All';
-
-            if (user.role !== 'Admin' && user.branch) {
-                globalBranch = user.branch;
-            }
-
+            const globalBranch = computeGlobalBranch();
             const branchParam = globalBranch === "All Branches" || globalBranch === "All" ? "All" : globalBranch;
             params.append('branch', branchParam);
 
@@ -174,6 +173,21 @@ const UpdateStudentFeeStructure: React.FC = () => {
         }
     };
 
+    const handleAssignStandardFee = async (feeTypeId: number) => {
+        if (!selectedStudentId) return;
+        try {
+            await api.post('/fees/assign-fee-type', {
+                student_id: selectedStudentId,
+                fee_type_id: feeTypeId
+            });
+            fetchInstallments();
+            setShowAssignStandardModal(false);
+            alert('Standard fee assigned successfully');
+        } catch (error: any) {
+            alert(error.response?.data?.error || 'Failed to assign standard fee');
+        }
+    };
+
     const selectedStudent = students.find(s => s.student_id === selectedStudentId);
 
     return (
@@ -189,9 +203,7 @@ const UpdateStudentFeeStructure: React.FC = () => {
                 {/* Filters */}
                 <div className="flex gap-2 items-center">
                     {(() => {
-                        const user = JSON.parse(localStorage.getItem('user') || '{}');
-                        const isBranchUser = user.role !== 'Admin';
-                        const displayBranch = isBranchUser && user.branch ? user.branch : (localStorage.getItem('currentBranch') || 'All');
+                        const displayBranch = computeGlobalBranch();
 
                         return (
                             <input
@@ -238,9 +250,20 @@ const UpdateStudentFeeStructure: React.FC = () => {
             {/* Content */}
             {selectedStudentId ? (
                 <div>
-                    <h3 className="text-lg font-medium text-gray-700 mb-4">
-                        Fee Installments for <span className="text-indigo-600 font-bold">{selectedStudent?.name}</span>
-                    </h3>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-medium text-gray-700">
+                            Fee Installments for <span className="text-indigo-600 font-bold">{selectedStudent?.name}</span>
+                        </h3>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setShowAssignStandardModal(true)}
+                                className="px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 shadow-sm flex items-center gap-1"
+                            >
+                                <RefreshIcon className="w-4 h-4" />
+                                Assign Standard Fee
+                            </button>
+                        </div>
+                    </div>
 
                     {installments.length === 0 ? (
                         <div className="text-center py-10 text-gray-500">No installments found for this student.</div>
@@ -278,6 +301,15 @@ const UpdateStudentFeeStructure: React.FC = () => {
                     feeTypes={feeTypes}
                     onClose={() => setShowAddModal(false)}
                     onSave={handleAddFee}
+                />
+            )}
+
+            {/* Assign Standard Fee Modal */}
+            {showAssignStandardModal && (
+                <AssignStandardFeeModal
+                    feeTypes={feeTypes}
+                    onClose={() => setShowAssignStandardModal(false)}
+                    onSave={handleAssignStandardFee}
                 />
             )}
         </div>
@@ -461,6 +493,49 @@ const AddFeeModal: React.FC<{
                         disabled={!feeTypeId || !amount}
                     >
                         Add
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AssignStandardFeeModal: React.FC<{
+    feeTypes: FeeType[];
+    onClose: () => void;
+    onSave: (feeTypeId: number) => void;
+}> = ({ feeTypes, onClose, onSave }) => {
+    const [feeTypeId, setFeeTypeId] = useState<number | ''>('');
+    const standardFeeTypes = feeTypes.filter(ft => ft.fee_type_group === 'Standard');
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+            <div className="bg-white p-6 rounded-lg w-96">
+                <h3 className="text-lg font-bold mb-4">Assign Standard Fee</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                    Select a standard fee to assign. The amount will be automatically determined from the class fee structure.
+                </p>
+
+                <div className="mb-6">
+                    <label className="block text-sm text-gray-600 mb-1">Standard Fee Type</label>
+                    <select
+                        value={feeTypeId}
+                        onChange={e => setFeeTypeId(Number(e.target.value))}
+                        className="w-full border rounded px-3 py-2"
+                    >
+                        <option value="">Select Fee Type</option>
+                        {standardFeeTypes.map(ft => <option key={ft.id} value={ft.id}>{ft.fee_type}</option>)}
+                    </select>
+                </div>
+
+                <div className="flex justify-end gap-3">
+                    <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Cancel</button>
+                    <button
+                        onClick={() => feeTypeId && onSave(feeTypeId as number)}
+                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                        disabled={!feeTypeId}
+                    >
+                        Assign
                     </button>
                 </div>
             </div>

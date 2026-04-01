@@ -8,7 +8,7 @@ interface FeeType {
 }
 
 interface ConcessionItem {
-    id: number; 
+    id: number;
     fee_type_id: number;
     fee_type_name: string;
     percentage: number;
@@ -33,16 +33,16 @@ interface BranchOption {
 const ConcessionMaster: React.FC = () => {
     const [feeTypes, setFeeTypes] = useState<FeeType[]>([]);
     const [concessions, setConcessions] = useState<ConcessionGroup[]>([]);
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
     // Form State
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [academicYear, setAcademicYear] = useState(localStorage.getItem('academicYear') || '');
     const [branch, setBranch] = useState('All');
-    const [isPercentage, setIsPercentage] = useState(true);
     const [showInPayment, setShowInPayment] = useState(false);
-    const [globalPercentage, setGlobalPercentage] = useState('');
-    const [concessionItems, setConcessionItems] = useState<Record<number, number>>({});
+    const [globalAmount, setGlobalAmount] = useState('');
+    const [concessionItems, setConcessionItems] = useState<Record<number, number | string>>({});
 
     // Edit Mode State
     const [isEditing, setIsEditing] = useState(false);
@@ -63,11 +63,11 @@ const ConcessionMaster: React.FC = () => {
 
     // Close dropdown on outside click
     useEffect(() => {
-        function handleClickOutside(event: MouseEvent) {
+        const handleClickOutside = (event: MouseEvent) => {
             if (copyDropdownRef.current && !copyDropdownRef.current.contains(event.target as Node)) {
                 setIsCopyDropdownOpen(false);
             }
-        }
+        };
         document.addEventListener("mousedown", handleClickOutside);
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
@@ -154,11 +154,10 @@ const ConcessionMaster: React.FC = () => {
     };
 
     const resetItems = (types: FeeType[]) => {
-        const initialItems: Record<number, number> = {};
+        const initialItems: Record<number, number | string> = {};
         types.forEach(ft => {
-            initialItems[ft.id] = 0;
+            initialItems[ft.id] = '';
         });
-        setConcessionItems(initialItems);
         setConcessionItems(initialItems);
     };
 
@@ -203,8 +202,8 @@ const ConcessionMaster: React.FC = () => {
     };
 
     const handleCopy = () => {
-        if (!globalPercentage) return;
-        const val = parseFloat(globalPercentage);
+        if (!globalAmount) return;
+        const val = parseFloat(globalAmount);
         if (isNaN(val)) return;
 
         const newItems = { ...concessionItems };
@@ -215,8 +214,11 @@ const ConcessionMaster: React.FC = () => {
     };
 
     const handleItemChange = (id: number, val: string) => {
-        const num = parseFloat(val) || 0;
-        setConcessionItems(prev => ({ ...prev, [id]: num }));
+        if (val === '') {
+            setConcessionItems(prev => ({ ...prev, [id]: '' }));
+            return;
+        }
+        setConcessionItems(prev => ({ ...prev, [id]: val }));
     };
 
     const handleEdit = (concession: ConcessionGroup) => {
@@ -224,13 +226,12 @@ const ConcessionMaster: React.FC = () => {
         setDescription(concession.description || '');
         setAcademicYear(concession.academic_year);
         setBranch(concession.branch || 'All');
-        setIsPercentage(concession.is_percentage);
         setShowInPayment(concession.show_in_payment || false);
 
         // Populate items
-        const newItems: Record<number, number> = {};
-        // First reset to 0
-        feeTypes.forEach(ft => newItems[ft.id] = 0);
+        const newItems: Record<number, number | string> = {};
+        // First reset to ''
+        feeTypes.forEach(ft => newItems[ft.id] = '');
         // Then fill with existing data
         concession.items.forEach(item => {
             newItems[item.fee_type_id] = item.percentage;
@@ -252,7 +253,7 @@ const ConcessionMaster: React.FC = () => {
 
         try {
 
-            await api.delete(`/concessions/${title}/${year}`);
+            await api.delete(`/concessions/${encodeURIComponent(title)}/${encodeURIComponent(year)}`);
             setMessage("Concession deleted successfully");
             fetchConcessions();
         } catch (error: any) {
@@ -275,23 +276,22 @@ const ConcessionMaster: React.FC = () => {
 
             const items = Object.keys(concessionItems).map(key => ({
                 fee_type_id: parseInt(key),
-                percentage: concessionItems[parseInt(key)]
+                percentage: parseFloat(concessionItems[parseInt(key)] as string) || 0
             }));
 
-            // Use state 'branch', which is synced or set.
             const payload = {
                 title,
                 description,
                 academic_year: academicYear,
                 branch,
-                is_percentage: isPercentage,
+                is_percentage: false,
                 show_in_payment: showInPayment,
                 items
             };
 
             if (isEditing) {
                 // UPDATE
-                await api.put(`/concessions/${originalTitle}/${originalYear}`, payload);
+                await api.put(`/concessions/${encodeURIComponent(originalTitle)}/${encodeURIComponent(originalYear)}`, payload);
                 setMessage("Concession updated successfully!");
             } else {
                 // CREATE
@@ -314,7 +314,7 @@ const ConcessionMaster: React.FC = () => {
     const handleReset = () => {
         setTitle('');
         setDescription('');
-        setGlobalPercentage('');
+        setGlobalAmount('');
         setAcademicYear(localStorage.getItem('academicYear') || '');
 
         const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -453,25 +453,16 @@ const ConcessionMaster: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between bg-pink-50 p-4 rounded-md border border-pink-100">
-                            <label className="flex items-center space-x-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    className="form-checkbox h-5 w-5 text-violet-600 rounded"
-                                    checked={isPercentage}
-                                    onChange={e => setIsPercentage(e.target.checked)}
-                                />
-                                <span className="text-gray-700 font-medium">Is Concession in percentage?</span>
-                            </label>
+                        <div className="flex items-center justify-between bg-pink-50 p-4 rounded-md border border-pink-100 mb-6">
+                            <span className="text-gray-700 font-medium">Set Global Concession Amount</span>
 
                             <div className="flex items-center space-x-2">
                                 <input
                                     type="number"
                                     className="border border-gray-300 rounded-md px-3 py-2 w-40"
-                                    placeholder="Enter Percentage"
-                                    value={globalPercentage}
-                                    onChange={e => setGlobalPercentage(e.target.value)}
-                                    disabled={!isPercentage}
+                                    placeholder="Enter Amount"
+                                    value={globalAmount}
+                                    onChange={e => setGlobalAmount(e.target.value)}
                                 />
                                 <button
                                     onClick={handleCopy}
@@ -502,13 +493,24 @@ const ConcessionMaster: React.FC = () => {
                             <thead className="bg-gray-50">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-10">
-                                        <input type="checkbox" className="rounded" />
+                                        <input
+                                            type="checkbox"
+                                            className="rounded"
+                                            checked={feeTypes.length > 0 && feeTypes.every(ft => selectedIds.has(ft.id))}
+                                            onChange={e => {
+                                                if (e.target.checked) {
+                                                    setSelectedIds(new Set(feeTypes.map(ft => ft.id)));
+                                                } else {
+                                                    setSelectedIds(new Set());
+                                                }
+                                            }}
+                                        />
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Fee Type
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Concession Percentage
+                                        Concession Amount
                                     </th>
                                 </tr>
                             </thead>
@@ -516,7 +518,17 @@ const ConcessionMaster: React.FC = () => {
                                 {feeTypes.map(ft => (
                                     <tr key={ft.id}>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <input type="checkbox" className="rounded" />
+                                            <input
+                                                type="checkbox"
+                                                className="rounded"
+                                                checked={selectedIds.has(ft.id)}
+                                                onChange={e => {
+                                                    const next = new Set(selectedIds);
+                                                    if (e.target.checked) next.add(ft.id);
+                                                    else next.delete(ft.id);
+                                                    setSelectedIds(next);
+                                                }}
+                                            />
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                             {ft.fee_type}
@@ -525,7 +537,7 @@ const ConcessionMaster: React.FC = () => {
                                             <input
                                                 type="number"
                                                 className="border border-gray-300 rounded-md px-3 py-1 w-full focus:ring-violet-500 focus:border-violet-500"
-                                                value={concessionItems[ft.id] || 0}
+                                                value={concessionItems[ft.id] !== undefined ? concessionItems[ft.id] : ''}
                                                 onChange={e => handleItemChange(ft.id, e.target.value)}
                                             />
                                         </td>

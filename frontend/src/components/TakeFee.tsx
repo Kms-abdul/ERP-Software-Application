@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api';
-import { ChevronDownIcon, TrashIcon, PrinterIcon } from './icons';
+import { TrashIcon, PrinterIcon } from './icons';
 import FeeReceipt from './FeeReceipt';
 import { Page } from '../App';
 
@@ -138,99 +138,7 @@ interface Concession {
     items: ConcessionItem[];
 }
 
-interface FeeManagementHeaderProps {
-    navigateTo?: (page: Page) => void;
-}
 
-const FeeManagementHeader: React.FC<FeeManagementHeaderProps> = ({ navigateTo }) => {
-    const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-
-    const handleDropdown = (name: string) => {
-        setOpenDropdown(openDropdown === name ? null : name);
-    };
-
-    const handleBlur = () => {
-        setTimeout(() => setOpenDropdown(null), 150);
-    };
-
-    const handleMenuItemClick = (item: string) => {
-        if (item === 'Fee Type' && navigateTo) {
-            navigateTo('fee-type');
-        } else if (item === 'Create Class Fee Structure' && navigateTo) {
-            navigateTo('class-fee-structure');
-        } else if (item === 'Fee Installments' && navigateTo) {
-            navigateTo('fee-installments');
-        } else if (item === 'Assign Special Fee Type' && navigateTo) {
-            navigateTo('assign-special-fee');
-        } else if (item === 'Update Student Fee Structure' && navigateTo) {
-            navigateTo('update-student-fee-structure');
-        }
-        setOpenDropdown(null);
-    };
-
-    const buttonStyle = "px-3 py-1.5 text-sm border border-violet-500 text-violet-700 rounded-md hover:bg-violet-50 focus:outline-none";
-
-    {/*const dropdownItems: { [key: string]: string[] } = {
-        feeMasters: ['Fee Installments', 'Fee Category', 'Fee Type group', 'Fee Type', 'Special Fee Type', 'Assign Special Fee Type', 'Remove Special Fee Type', 'Manage Bank Account', 'Create Class Fee Structure', 'Update Student Fee Structure', 'Assign Fee Group To Students', 'Transfer Fee Due', 'Fee Setting', 'Update Student Fee Group', 'Import Fee Group'],
-        cheque: ['Manage Cheques', 'Fee PDC', 'Fee All PDC', 'Bounced Cheque Report', 'Cheque Date Report', 'Cheque Clearance Report'],
-        concession: ['Concession Template', 'Set Student Concession', 'Set Bulk Concession', 'Student Availing Concessions', 'Paid Concession Report', 'Expected Concession Report'],
-        refund: ['Refund/TC Requests', 'Refund Fee', 'Refundable Fees Refund Report', 'Refundable Fees Deposit Report', 'Refund Report', 'Refund Cancel Report', 'Adjust Fee', 'Adjust Fee Report', 'Nullify Fee', 'Nullify Fee Report'],
-        voucher: ['Create Voucher', 'Voucher List', 'Transport Voucher'],
-    };*/}
-
-    const renderDropdown = (name: string, items: string[]) => (
-        <div className="relative">
-            <button onClick={() => handleDropdown(name)} onBlur={handleBlur} className={`${buttonStyle} flex items-center capitalize`}>
-                {name.replace(/([A-Z])/g, ' $1').trim()} <ChevronDownIcon className="w-4 h-4 ml-1" />
-            </button>
-            {openDropdown === name && (
-                <ul className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg py-1 z-30 text-gray-700 border max-h-60 overflow-y-auto">
-                    {items.map(item => (
-                        <li key={item}>
-                            <a
-                                href="#"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    handleMenuItemClick(item);
-                                }}
-                                className="block px-4 py-2 text-sm hover:bg-gray-100"
-                            >
-                                {item}
-                            </a>
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </div>
-    );
-
-    return (
-        <div className="bg-white" style={{ borderTop: '4px solid #6d28d9' }}>
-
-            {/*<div className="container-fluid mx-auto flex justify-between items-center p-3">
-                <h2 className="text-xl font-semibold text-gray-800 flex items-center">
-                    <span className="text-violet-700 font-sans mr-2">₹</span>
-                    Fee Management
-                </h2>
-               <div className="flex items-center space-x-2">
-                    {renderDropdown('feeMasters', dropdownItems.feeMasters)}
-                    {renderDropdown('cheque', dropdownItems.cheque)}
-                    <button className={buttonStyle}>Fee Reports</button>
-                    <button
-                        className={`${buttonStyle} bg-violet-600 text-white hover:bg-violet-700`}
-                        onClick={() => navigateTo && navigateTo('take-fee')}
-                    >
-                        Fee Payment
-                    </button>
-                    {renderDropdown('concession', dropdownItems.concession)}
-                    {renderDropdown('refund', dropdownItems.refund)}
-                    {renderDropdown('voucher', dropdownItems.voucher)}
-                    <button className={buttonStyle}>Bulk Fee Payment</button>
-                </div>
-            </div>*/}
-        </div>
-    );
-};
 
 
 const InfoCard: React.FC<{ title: string; value: string; bgColor: string; textColor: string; icon: React.ReactNode; }> = ({ title, value, bgColor, textColor, icon }) => (
@@ -305,7 +213,7 @@ const InstallmentRow: React.FC<{ installment: FeeInstallment; isSelected: boolea
     );
 };
 
-const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = ({ navigateTo }) => {
+const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
     // State for students and filtering
     const [students, setStudents] = useState<FeeStudent[]>([]);
     const [classes, setClasses] = useState<string[]>([]);
@@ -357,7 +265,7 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = ({ navigateTo }
 
     const handleDeleteReceipt = async (receiptNo: string) => {
         if (!window.confirm("Are you sure you want to cancel this ENTIRE RECEIPT? This will revert all associated fee payments.")) return;
-        
+
         const reason = prompt("Please enter a valid reason for cancellation:");
         if (!reason || reason.trim() === "") {
             alert("Cancellation aborted. Reason is required.");
@@ -522,17 +430,8 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = ({ navigateTo }
     const [transactionId, setTransactionId] = useState('');
     const [transactionIdDescription, setTransactionIdDescription] = useState('');
 
-    // Admin State
-    const [isAdmin, setIsAdmin] = useState(false);
-
     // Initialize User Role
-    useEffect(() => {
-        const userStr = localStorage.getItem('user');
-        if (userStr) {
-            const u = JSON.parse(userStr);
-            setIsAdmin(u.role === 'Admin');
-        }
-    }, []);
+
 
     // Fetch classes on mount
     useEffect(() => {
@@ -589,7 +488,7 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = ({ navigateTo }
                 params.append("branch", globalBranch === "All Branches" || globalBranch === "All" ? "All" : globalBranch);
                 const response = await api.get(`/fees/students?${params.toString()}`);
 
-                const data = response.data;
+                const { data } = response;
                 setStudents(Array.isArray(data) ? data : (data.students || []));
             } catch (error) {
                 console.error('Error fetching students:', error);
@@ -693,13 +592,10 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = ({ navigateTo }
                 }
 
                 // Check If Payment is Before Last Pay Date (Due Date)
-                if (item.due_date) {
-                    // String comparison works for YYYY-MM-DD
-                    if (paymentDate > item.due_date) {
-                        console.log(`DEBUG: Skipping ${item.title} - Payment Date (${paymentDate}) is after Due Date (${item.due_date})`);
-                        skippedItems.push(`${item.title} (Due: ${item.due_date})`);
-                        continue;
-                    }
+                if (item.due_date && paymentDate > item.due_date) {
+                    console.log(`DEBUG: Skipping ${item.title} - Payment Date (${paymentDate}) is after Due Date (${item.due_date})`);
+                    skippedItems.push(`${item.title} (Due: ${item.due_date})`);
+                    continue;
                 }
 
                 // Calculate discount based on the amount being paid (payable or dueAmount)
@@ -879,7 +775,6 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = ({ navigateTo }
 
     return (
         <div className="container-fluid mx-auto bg-gray-50">
-            <FeeManagementHeader navigateTo={navigateTo} />
             <div className="p-4">
                 <div className="bg-white rounded-lg shadow-lg p-4">
                     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -1109,7 +1004,7 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = ({ navigateTo }
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700">Payment Date*</label>
-                                        <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500" />
+                                        <input type="date" value={paymentDate} disabled={true} onChange={e => setPaymentDate(e.target.value)} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500" />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700">School Receipt No</label>
@@ -1168,11 +1063,11 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = ({ navigateTo }
                             <h2 className="text-xl font-bold">Payment History - {selectedStudent?.name} ({localStorage.getItem('academicYear')})</h2>
                             <div className="flex items-center space-x-4">
                                 <label className="flex items-center space-x-2 text-sm">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={showCancelled} 
+                                    <input
+                                        type="checkbox"
+                                        checked={showCancelled}
                                         onChange={e => setShowCancelled(e.target.checked)}
-                                        className="h-4 w-4 text-violet-600 rounded border-gray-300" 
+                                        className="h-4 w-4 text-violet-600 rounded border-gray-300"
                                     />
                                     <span>Show Cancelled</span>
                                 </label>
