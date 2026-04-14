@@ -17,7 +17,7 @@ from models import (
 
 
 from services.sequence_service import SequenceService
-from helpers import token_required, require_academic_year, get_branch_query_filter, student_to_dict, auto_enroll_student_fee
+from helpers import token_required, require_academic_year, get_branch_query_filter, student_to_dict, auto_enroll_student_fee, require_editable_student
 from datetime import datetime
 from sqlalchemy import or_, and_, func
 import io
@@ -160,7 +160,7 @@ def get_students(current_user):
                 StudentAcademicRecord, 
                 and_(Student.student_id == StudentAcademicRecord.student_id, StudentAcademicRecord.academic_year == h_year)
             )
-            # Filter: Show IF (currently active in this year) OR (has a VALID historical record for this year)
+            # Filter: Show IF (currently in this year) OR (was promoted to this year and still marked active)
             q = q.filter(or_(
                 and_(StudentAcademicRecord.id != None, StudentAcademicRecord.is_promoted == True),
                 Student.academic_year == h_year
@@ -279,6 +279,7 @@ def get_students(current_user):
                         s_dict['rollNo'] = record.roll_number
                         s_dict['academic_year'] = record.academic_year
                         s_dict['is_promoted'] = record.is_promoted
+                        s_dict['is_locked'] = record.is_locked
                     else:
                         s_dict['academic_year'] = h_year
                 else:
@@ -318,6 +319,7 @@ def get_students(current_user):
 
 @bp.route("/api/students/<int:student_id>", methods=["PUT"])
 @token_required
+@require_editable_student
 def update_student(current_user, student_id):
     try:
         student = Student.query.get(student_id)
@@ -724,6 +726,7 @@ def create_student(current_user):
 
 @bp.route("/api/students/<int:student_id>", methods=["DELETE"])
 @token_required
+@require_editable_student
 def delete_student(current_user, student_id):
     try:
         student = Student.query.get(student_id)
@@ -969,6 +972,7 @@ def get_student_history(current_user, student_id):
             "section": r.section,
             "roll_no": r.roll_number,
             "is_promoted": r.is_promoted,
+            "is_locked": r.is_locked,
             "promoted_date": r.promoted_date.isoformat() if r.promoted_date else None,
             "created_at": r.created_at.isoformat() if r.created_at else None
         } for r in records]
@@ -1015,8 +1019,11 @@ def promote_students_bulk(current_user):
                     errors.append(f"Unauthorized for student {student.admission_no} (branch mismatch)")
                     del student_map[sid]
 
+        from datetime import timezone
         for student_id, student in student_map.items():
             try:
+                db.session.begin_nested()
+                
                 if student_id in processed_ids:
                     continue
                 processed_ids.add(student_id)
@@ -1030,29 +1037,25 @@ def promote_students_bulk(current_user):
                     academic_year=student.academic_year
                 ).first()
 
-                # HISTORY PERSISTENCE: If they are leaving a year that has no record, create it now
-                if not current_record:
-                    current_record = StudentAcademicRecord(
-                        student_id=student_id,
-                        academic_year=student.academic_year,
-                        class_name=student.clazz,
-                        section=student.section,
-                        roll_number=student.Roll_Number,
-                        is_promoted=True  # Mark it as a valid history record
-                    )
-                    db.session.add(current_record)
-                    db.session.commit() # Commit to ensure it exists before proceeding
-
                 new_roll_no = roll_numbers.get(str(student_id), student.Roll_Number)
                 final_section = new_section or student.section
 
                 if existing_target_record:
                     if student.academic_year == new_year:
                         errors.append(f"Student {student.admission_no} already exists in Academic Year {new_year}")
+                        db.session.rollback()
                         continue
                     
                     # RE-PROMOTION CASE: Reactivate the existing record
-                    existing_target_record.is_promoted = True
+                    if current_record:
+                        current_record.is_promoted = True
+                        current_record.promoted_date = datetime.now()
+                        current_record.is_locked = True
+                        current_record.locked_at = datetime.now(timezone.utc)
+
+                    existing_target_record.is_promoted = False
+                    existing_target_record.is_locked = False
+                    existing_target_record.locked_at = None
                     existing_target_record.promoted_date = datetime.now()
                     existing_target_record.class_name = new_class
                     existing_target_record.section = final_section
@@ -1070,7 +1073,11 @@ def promote_students_bulk(current_user):
                     success_count += 1
                     continue
 
-
+                if current_record:
+                    current_record.is_promoted = True
+                    current_record.promoted_date = datetime.now()
+                    current_record.is_locked = True
+                    current_record.locked_at = datetime.now(timezone.utc)
 
                 new_record = StudentAcademicRecord(
                     student_id=student_id,
@@ -1078,8 +1085,9 @@ def promote_students_bulk(current_user):
                     class_name=new_class,
                     section=final_section,
                     roll_number=new_roll_no,
-                    is_promoted=True,
-                    promoted_date=datetime.now()
+                    is_promoted=False,
+                    is_locked=False,
+                    promoted_date=None
                 )
                 db.session.add(new_record)
 
@@ -1088,8 +1096,6 @@ def promote_students_bulk(current_user):
                 student.Roll_Number = new_roll_no
                 student.academic_year = new_year
 
-                db.session.commit()
-
                 try:
                     auto_enroll_student_fee(
                         student_id=student_id,
@@ -1097,11 +1103,11 @@ def promote_students_bulk(current_user):
                         year=new_year,
                         is_student_new=False
                     )
-                    db.session.commit()
                 except Exception as fee_err:
                     logger.warning(f"Fee auto-enroll failed for {student.admission_no}: {fee_err}")
                     errors.append(f"Fee enrollment warning for {student.admission_no}: {fee_err}")
 
+                db.session.commit()
                 success_count += 1
 
             except Exception as e:
@@ -1147,6 +1153,9 @@ def demote_students_bulk(current_user):
         return jsonify({"error": "source_year and restore_year are required"}), 400
     if source_year == restore_year:
         return jsonify({"error": "source_year and restore_year cannot be the same"}), 400
+        
+    if current_user.role != 'Admin':
+        return jsonify({"error": "Demotion not allowed"}), 403
 
     success_count = 0
     errors = []
@@ -1200,9 +1209,13 @@ def demote_students_bulk(current_user):
                 # 4. Clear is_promoted on source record (keep row for audit)
                 source_record.is_promoted = False
                 source_record.promoted_date = None
+                source_record.is_locked = False
+                source_record.locked_at = None
 
-                # 5. Reactivate restore year record (marked as valid history)
-                restore_record.is_promoted = True
+                # 5. Reactivate restore year record (student is back here)
+                restore_record.is_promoted = False
+                restore_record.is_locked = False
+                restore_record.locked_at = None
 
                 # 6. Point the Student back to restore year
                 student.academic_year = restore_year
@@ -1252,11 +1265,8 @@ def get_student_summary(current_user):
                 StudentAcademicRecord, 
                 and_(Student.student_id == StudentAcademicRecord.student_id, StudentAcademicRecord.academic_year == h_year)
             )
-            # Filter: Show IF (currently active in this year) OR (has a VALID historical record for this year)
-            base_q = base_q.filter(or_(
-                and_(StudentAcademicRecord.id != None, StudentAcademicRecord.is_promoted == True),
-                Student.academic_year == h_year
-            ))
+            # Filter: Has record OR is currently in year
+            base_q = base_q.filter(or_(StudentAcademicRecord.id != None, Student.academic_year == h_year))
         else:
             # Current State
             base_q = db.session.query(Student, None)

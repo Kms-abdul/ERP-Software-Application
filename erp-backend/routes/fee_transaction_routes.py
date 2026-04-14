@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from extensions import db
 from models import Student, StudentFee, FeePayment, Branch, FeeInstallment, Concession, ClassFeeStructure, StudentAcademicRecord, FeeType
-from helpers import token_required, require_academic_year, normalize_fee_title, assign_fee_to_student
+from helpers import token_required, require_academic_year, normalize_fee_title, assign_fee_to_student, require_editable_student, ensure_student_editable
 from services.sequence_service import SequenceService
 from datetime import datetime, date
 from decimal import Decimal
@@ -277,6 +277,7 @@ def _process_fee_allocation(alloc, student, receipt_no, payment_mode, payment_da
 
 @bp.route("/api/fees/payment", methods=["POST"])
 @token_required
+@require_editable_student
 def record_fee_payment(current_user):
     """Record payment with proper status and due amount calculation"""
     data = request.json or {}
@@ -412,6 +413,17 @@ def get_student_payment_history(current_user, student_id):
 def delete_fee_payment(current_user, payment_id):
     """Cancel a payment (soft delete) and revert the fee status"""
     try:
+        payment = FeePayment.query.get(payment_id)
+        if not payment:
+            return jsonify({"error": "Payment not found"}), 404
+            
+        try:
+            h_year = request.headers.get("X-Academic-Year")
+            if h_year:
+                ensure_student_editable(payment.student_id, h_year)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 403
+            
         # Get Reason from Body (DELETE with body)
         data = request.get_json(silent=True) or {}
         reason = data.get("reason")
@@ -523,6 +535,13 @@ def assign_special_fee(current_user):
 
                 if not fee_type_id or amount is None or not academic_year:
                     continue
+                    
+                try:
+                    frompers = __import__("helpers")
+                    frompers.ensure_student_editable(s_id, academic_year)
+                except Exception:
+                    skipped_count += 1
+                    continue
 
                 # Fetch Fee Type for details
                 fee_type = FeeType.query.get(fee_type_id)
@@ -577,6 +596,7 @@ def assign_special_fee(current_user):
 
 @bp.route("/api/fees/student-fee/add", methods=["POST"])
 @token_required
+@require_editable_student
 def add_student_fee(current_user):
     """Manually add a fee record to a student"""
     data = request.json or {}
@@ -632,6 +652,14 @@ def update_student_fee(current_user, fee_id):
         
     try:
         sf = StudentFee.query.get(fee_id)
+        
+        if sf:
+            try:
+                h_year = request.headers.get("X-Academic-Year")
+                if h_year:
+                    ensure_student_editable(sf.student_id, h_year)
+            except Exception as e:
+                return jsonify({"error": str(e)}), 403
         if not sf or not sf.is_active:
              return jsonify({"error": "Fee record not found"}), 404
              
@@ -675,6 +703,14 @@ def delete_student_fee(current_user, fee_id):
     """Delete a student fee record"""
     try:
         sf = StudentFee.query.get(fee_id)
+        
+        if sf:
+            try:
+                h_year = request.headers.get("X-Academic-Year")
+                if h_year:
+                    ensure_student_editable(sf.student_id, h_year)
+            except Exception as e:
+                return jsonify({"error": str(e)}), 403
         if not sf:
              return jsonify({"error": "Fee record not found"}), 404
              

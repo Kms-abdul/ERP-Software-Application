@@ -4,7 +4,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 from models import Student, ClassTest, StudentTestAssignment, StudentAcademicRecord, ClassMaster, TestType
-from datetime import datetime
+from helpers import token_required, ensure_student_editable
 
 student_test_bp = Blueprint('student_test', __name__)  
 
@@ -107,7 +107,8 @@ def get_assignments():
         return jsonify({'error': str(e)}), 500
 
 @student_test_bp.route('/student-test-assignments', methods=['POST'])
-def save_assignments():
+@token_required
+def save_assignments(current_user):
     try:
         data = request.json
         academic_year = data.get('academic_year_id')
@@ -117,6 +118,12 @@ def save_assignments():
         
         if not update_list:
              return jsonify({'message': 'No changes to save'}), 200
+             
+        for update in update_list:
+            try:
+                ensure_student_editable(update['student_id'], academic_year)
+            except Exception as e:
+                return jsonify({"error": str(e)}), 403
 
         for update in update_list:
             student_id = update.get('student_id')
@@ -131,15 +138,13 @@ def save_assignments():
             
             if existing:
                 existing.status = status
-                existing.updated_at = datetime.now()
             else:
                 new_assign = StudentTestAssignment(
                     student_id=student_id,
                     class_test_id=class_test_id,
                     academic_year=academic_year,
                     branch=branch,
-                    status=status,
-                    created_at=datetime.now()
+                    status=status
                 )
                 db.session.add(new_assign)
         

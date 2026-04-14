@@ -7,7 +7,7 @@ from models import (
 from sqlalchemy import and_
 import traceback
 from datetime import datetime
-from helpers import token_required
+from helpers import token_required, ensure_student_editable
 
 student_marks_bp = Blueprint('student_marks_bp', __name__)
 

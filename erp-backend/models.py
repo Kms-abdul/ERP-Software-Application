@@ -472,8 +472,15 @@ class StudentAcademicRecord(db.Model, AuditMixin):
     roll_number = db.Column(db.Integer)
     is_promoted = db.Column(db.Boolean, default=False)
     promoted_date = db.Column(db.DateTime)
+    is_locked = db.Column(db.Boolean, default=False)
+    locked_at = db.Column(db.DateTime)
     
     student = db.relationship("Student", backref=db.backref("academic_records", lazy=True))
+
+    __table_args__ = (
+        db.Index('idx_student_year', 'student_id', 'academic_year'),
+        db.UniqueConstraint('student_id', 'academic_year', name='uq_student_academic_year'),
+    )
 
 
 

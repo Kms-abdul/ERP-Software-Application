@@ -204,7 +204,12 @@ const TakeAttendanceForm: React.FC = () => {
 
     const markAll = (status: string) => {
         const updated = students.reduce((acc, student) => {
-            acc[student.student_id!] = status;
+            if (!(student as any).is_locked) {
+                acc[student.student_id!] = status;
+            } else {
+                // keep old status if locked
+                acc[student.student_id!] = attendance[student.student_id!];
+            }
             return acc;
         }, {} as { [key: number]: string });
         setAttendance(updated);
@@ -325,8 +330,16 @@ const TakeAttendanceForm: React.FC = () => {
                                                                 type="radio"
                                                                 name={`status-${student.student_id}`}
                                                                 checked={attendance[student.student_id!] === opt.val}
-                                                                onChange={() => handleStatusChange(student.student_id!, opt.val)}
-                                                                className={`h-5 w-5 text-${opt.color}-600 border-gray-300 focus:ring-${opt.color}-500`}
+                                                                onChange={() => {
+                                                                    if ((student as any).is_locked) {
+                                                                        alert("This student record is locked for this academic year.");
+                                                                    } else {
+                                                                        handleStatusChange(student.student_id!, opt.val);
+                                                                    }
+                                                                }}
+                                                                disabled={(student as any).is_locked}
+                                                                className={`h-5 w-5 text-${opt.color}-600 border-gray-300 focus:ring-${opt.color}-500 ${(student as any).is_locked ? 'cursor-not-allowed opacity-50' : ''}`}
+                                                                title={(student as any).is_locked ? 'Record locked (Promoted)' : ''}
                                                             />
                                                             <span className={`ml-1 text-${opt.color}-700 font-medium`}>{opt.label}</span>
                                                         </label>
@@ -1063,8 +1076,8 @@ const MonthlyAttendanceEntryTab: React.FC = () => {
                                         </button>
                                         <button
                                             onClick={handleSave}
-                                            disabled={loading}
-                                            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-md text-sm font-semibold disabled:bg-gray-400"
+                                            disabled={loading || students.every((s: any) => s.is_locked)}
+                                            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-md text-sm font-semibold disabled:bg-gray-400 disabled:opacity-50"
                                         >
                                             {saving ? "Saving..." : "Save All Changes"}
                                         </button>

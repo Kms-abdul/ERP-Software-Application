@@ -3,7 +3,7 @@ from extensions import db
 from models import SubjectMaster, Branch, OrgMaster, ClassSubjectAssignment
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import exists
-from helpers import token_required
+from helpers import token_required, ensure_student_editable
 
 bp = Blueprint("academic", __name__)
 @bp.route("/api/academic/subjects", methods=["POST"])
@@ -750,6 +750,12 @@ def save_student_subjects(current_user):
 
         if not all([academic_year, branch, student_data]):
             return jsonify({"error": "Missing data"}), 400
+            
+        for item in student_data:
+            try:
+                ensure_student_editable(item.get("student_id"), academic_year)
+            except Exception as e:
+                return jsonify({"error": str(e)}), 403
 
         count = 0
         for item in student_data:

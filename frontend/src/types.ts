@@ -63,6 +63,7 @@ export interface Student {
   feeInstallments: FeeInstallment[];
   total_due?: number;
   is_promoted?: boolean;
+  is_locked?: boolean;
 }
 
 

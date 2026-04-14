@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from extensions import db
 from models import Student, Attendance, Branch, UserBranchAccess, StudentAcademicRecord
-from helpers import token_required, require_academic_year, student_to_dict, get_default_location
+from helpers import token_required, require_academic_year, student_to_dict, get_default_location, ensure_student_editable
 from datetime import datetime, date
 from sqlalchemy import or_
 from routes.config_routes import is_weekoff_or_holiday
@@ -82,6 +82,8 @@ def get_attendance(current_user):
             s_dict['section'] = record.section
             s_dict['Roll_Number'] = record.roll_number
             s_dict['rollNo'] = record.roll_number # Frontend expects this often
+            s_dict['is_locked'] = record.is_locked
+            s_dict['is_promoted'] = record.is_promoted
             students.append(s_dict)
             student_ids.append(s.student_id)
             
@@ -165,6 +167,13 @@ def save_attendance(current_user):
         h_year, err, code = require_academic_year()
         if err: return err, code
         
+        locked_students = set()
+        for att in attendance_list:
+            try:
+                ensure_student_editable(att["student_id"], h_year)
+            except Exception as e:
+                locked_students.add(att["student_id"])
+        
         if current_user.role != 'Admin':
              h_branch = current_user.branch
 
@@ -187,6 +196,11 @@ def save_attendance(current_user):
                 skip_details.append(f"Invalid Item: {item}")
                 continue
             
+            if s_id in locked_students:
+                skipped_count += 1
+                skip_details.append(f"Student {s_id} is locked/promoted")
+                continue
+
             try:
                 d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
                 valid_items.append({

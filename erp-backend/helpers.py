@@ -186,6 +186,44 @@ def normalize_fee_title(title):
         return ""
     return title.lower().replace(" fee", "").replace("admisson", "admission").strip()
 
+class StudentRecordLockedError(Exception):
+    pass
+
+def ensure_student_editable(student_id, academic_year):
+    from models import StudentAcademicRecord
+    record = StudentAcademicRecord.query.filter_by(
+        student_id=student_id,
+        academic_year=academic_year
+    ).first()
+
+    if not record:
+        raise ValueError("Student academic record not found")
+
+    if record.is_locked:
+        raise StudentRecordLockedError("Student record is locked")
+
+def require_editable_student(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        student_id = kwargs.get("student_id")
+        
+        # When creating new fees, marks, or editing attendance, sometimes student_id might come from request body
+        if not student_id and request.is_json:
+            student_id = request.json.get("student_id")
+            
+        academic_year = request.headers.get("X-Academic-Year") or (request.is_json and request.json.get("academic_year"))
+        
+        if student_id and academic_year:
+            try:
+                ensure_student_editable(student_id, academic_year)
+            except StudentRecordLockedError as e:
+                return jsonify({"error": str(e)}), 403
+            except ValueError as e:
+                return jsonify({"error": str(e)}), 400
+                
+        return func(*args, **kwargs)
+    return wrapper
+
 def student_to_dict(s):
     # build name safely (no extra spaces if a part is missing)
     name_parts = [s.first_name, s.StudentMiddleName, s.last_name]
@@ -383,6 +421,14 @@ def assign_fee_to_student(student_id, fee_structure, is_student_new=False):
             return
 
         logger.debug(f"assign_fee_to_student called for Student {student_id}, FeeStruct {fee_structure.id}")
+
+        try:
+            ensure_student_editable(student_id, fee_structure.academicyear)
+        except StudentRecordLockedError:
+            logger.debug(f"Skipping assignment - Student {student_id} record is locked/promoted for {fee_structure.academicyear}.")
+            return
+        except ValueError:
+            pass
 
         if fee_structure.isnewadmission and not is_student_new:
             logger.debug("Skipping - Fee is for new admission, student is not new.")
