@@ -148,6 +148,8 @@ def get_students(current_user):
         # Header Filtering
         h_branch = request.headers.get("X-Branch")
         h_year = request.headers.get("X-Academic-Year")
+        if h_year:
+            h_year = h_year.strip()
         
         # Base Query
         # We always start with Student.
@@ -537,6 +539,8 @@ def update_student(current_user, student_id):
 @token_required
 def create_student(current_user):
     h_year, err, code = require_academic_year()
+    if h_year:
+        h_year = h_year.strip()
     if err:
         return err, code
 

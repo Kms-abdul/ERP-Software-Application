@@ -254,10 +254,14 @@ def get_student_report(current_user):
             LEFT JOIN student_marks stm ON stm.class_test_id = cts.class_test_id 
                 AND stm.subject_id = sm.id 
                 AND stm.student_id = %s
+            LEFT JOIN studentsubjectassignment ssa ON ssa.student_id = %s 
+                AND ssa.subject_id = sm.id 
+                AND ssa.academic_year = %s
             WHERE cts.class_test_id = %s
+              AND (ssa.status IS NULL OR ssa.status = 1)
             ORDER BY cts.subject_order
         """
-        cursor.execute(subjects_query, (student_id, class_test_id))
+        cursor.execute(subjects_query, (student_id, student_id, academic_year, class_test_id))
         subjects = cursor.fetchall()
 
         avg_query = """
@@ -1015,4 +1019,3 @@ def get_student_report_by_year(current_user):
             cursor.close()
         if conn:
             conn.close()
-            

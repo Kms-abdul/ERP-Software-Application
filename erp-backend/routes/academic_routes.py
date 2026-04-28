@@ -71,6 +71,8 @@ def create_subject(current_user):
 def list_subjects():
     try:
         academic_year = request.args.get("academic_year")
+        if academic_year:
+            academic_year = academic_year.strip()
         
         query = SubjectMaster.query
         
@@ -537,6 +539,8 @@ def get_sections():
 
     branch_input = request.args.get("branch") or request.headers.get("X-Branch")
     academic_year = request.args.get("academic_year") or request.headers.get("X-Academic-Year")
+    if academic_year:
+        academic_year = academic_year.strip()
 
     try:
         sections = db.session.query(Student.section).filter(Student.clazz == class_name).distinct().all()
@@ -555,9 +559,8 @@ def get_sections():
             if str(branch_input).isdigit():
                 branch_obj = Branch.query.get(int(branch_input))
             else:
-                branch_obj = Branch.query.filter_by(branch_name=branch_input).first()
-                if not branch_obj:
-                    branch_obj = Branch.query.filter_by(branch_code=branch_input).first()
+                branch_obj = Branch.query.filter_by(branch_name=branch_input).first() or \
+                             Branch.query.filter_by(branch_code=branch_input).first()
 
             if branch_obj:
                 query = query.filter(ClassSection.branch_id == branch_obj.id)
@@ -596,6 +599,11 @@ def get_assignment_data():
         if not all([class_id, academic_year, branch]):
             return jsonify({"error": "Missing required filters"}), 400
 
+        # Normalize academic year (trim spaces)
+        academic_year = academic_year.strip() if academic_year else academic_year
+
+        print(f"[DEBUG] get_assignment_data: class_id={class_id}, academic_year='{academic_year}', branch={branch}")
+
         # 1. Get Students (History-Aware)
         # We need to find students who were in this class/section in the requested academic_year.
         # They might be currently in a different class (promoted), so we check StudentAcademicRecord.
@@ -606,25 +614,27 @@ def get_assignment_data():
                  StudentAcademicRecord.academic_year == academic_year)
         )
 
-        # Base Filter: Branch (applies to Student profile generally, or historical if needed? 
-        # Usually checking current branch is enough if they stay in same branch, 
-        # but if they moved branches, we might miss them. 
-        # For now, we assume Student.branch or h_branch context. 
-        # Let's use Student.branch for simplicity unless StudentAcademicRecord has branch? It does not.)
-        
         # Check Branch
-        # Use helper or direct filter
         if branch and branch != "All":
              query = query.filter(Student.branch == branch)
 
-        # Filter by Class for the specific Academic Year
-        # Logic:
-        # A) Record exists for this year AND Record.class == requested_class
-        # B) OR No Record exists for this year AND Student.class == requested_class AND Student.academic_year == requested_year
+        # Filter by Class and Academic Year
+        # We MUST ensure the student was in this class in THIS academic year.
+        # Primary check: StudentAcademicRecord (History)
+        # Fallback check: Student Profile (Current) - ONLY if NO record exists for that student in ANY year?
+        # Actually, StudentAcademicRecord is created for the current year too usually.
+        
+        # Stricter Filter:
+        # If a record exists for THIS year, it MUST match the class.
+        # If NO record exists for THIS year, they MUST match the current profile year and class.
         
         query = query.filter(or_(
             and_(StudentAcademicRecord.id != None, StudentAcademicRecord.class_name == class_id),
-            and_(StudentAcademicRecord.id == None, Student.clazz == class_id, Student.academic_year == academic_year)
+            and_(
+                StudentAcademicRecord.id == None, 
+                Student.clazz == class_id, 
+                Student.academic_year == academic_year
+            )
         ))
 
         # Filter by Section (if provided)
@@ -751,9 +761,36 @@ def save_student_subjects(current_user):
         if not all([academic_year, branch, student_data]):
             return jsonify({"error": "Missing data"}), 400
             
+        # Normalize academic year
+        academic_year = academic_year.strip() if academic_year else academic_year
+        class_id = data.get("class_id") # New: context validation
+
         for item in student_data:
+            s_id = item.get("student_id")
             try:
-                ensure_student_editable(item.get("student_id"), academic_year)
+                # 1. Basic Editability Check (Lock/Record existence)
+                ensure_student_editable(s_id, academic_year)
+                
+                # 2. Context Consistency Check
+                # Verify student is in the requested class for the requested year
+                from models import StudentAcademicRecord
+                valid_student = False
+                
+                # Check history
+                hist_record = StudentAcademicRecord.query.filter_by(student_id=s_id, academic_year=academic_year).first()
+                if hist_record:
+                    if hist_record.class_name == class_id:
+                        valid_student = True
+                else: 
+                    # Check current profile if no history record for this year
+                    s_obj = Student.query.get(s_id)
+                    if s_obj and s_obj.clazz == class_id and s_obj.academic_year == academic_year:
+                        valid_student = True
+                
+                if not valid_student:
+                    print(f"[WARN] Save blocked: Student {s_id} does not match context year={academic_year}, class={class_id}")
+                    return jsonify({"error": f"Student {s_id} does not belong to class {class_id} in {academic_year}"}), 400
+
             except Exception as e:
                 return jsonify({"error": str(e)}), 403
 
