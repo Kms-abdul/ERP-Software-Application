@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../api';
+import { UserIcon } from './icons';
 
 interface ClassItem {
     id: number;
@@ -457,11 +458,18 @@ const SearchStudent: React.FC = () => {
                                 onClick={() => loadStudentDetails(student)}
                                 className={`flex w-full items-start gap-3 border-b border-gray-100 px-5 py-4 text-left transition ${selectedStudent?.student_id === student.student_id ? 'bg-violet-50' : 'hover:bg-gray-50'}`}
                             >
-                                <img
-                                    src={student.photo || 'https://via.placeholder.com/56'}
-                                    alt={student.name}
-                                    className="h-14 w-14 rounded-full border border-gray-200 object-cover"
-                                />
+                                {student.photo ? (
+                                    <img
+                                        src={student.photo}
+                                        alt={student.name}
+                                        className="h-14 w-14 rounded-full border border-gray-200 object-cover"
+                                        onError={(e) => { (e.target as HTMLImageElement).style.display='none'; (e.target as HTMLImageElement).parentElement?.classList.add('flex', 'items-center', 'justify-center', 'bg-gray-50'); }}
+                                    />
+                                ) : (
+                                    <div className="h-14 w-14 rounded-full border border-gray-200 bg-gray-50 flex items-center justify-center">
+                                        <UserIcon className="h-8 w-8 text-gray-400" />
+                                    </div>
+                                )}
                                 <div className="min-w-0 flex-1">
                                     <div className="truncate font-semibold text-gray-900">{student.name}</div>
                                     <div className="mt-1 text-xs text-gray-500">
@@ -504,11 +512,18 @@ const SearchStudent: React.FC = () => {
                             <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
                                 <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[220px_repeat(4,minmax(0,1fr))]">
                                     <div className="border-b border-gray-100 pb-5 text-center lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6">
-                                        <img
-                                            src={selectedStudent.photo || 'https://via.placeholder.com/120'}
-                                            alt={selectedStudent.name}
-                                            className="mx-auto h-28 w-28 rounded-full border-4 border-amber-300 object-cover"
-                                        />
+                                        {selectedStudent.photo ? (
+                                            <img
+                                                src={selectedStudent.photo}
+                                                alt={selectedStudent.name}
+                                                className="mx-auto h-28 w-28 rounded-full border-4 border-amber-300 object-cover"
+                                                onError={(e) => { (e.target as HTMLImageElement).style.display='none'; (e.target as HTMLImageElement).parentElement?.classList.add('flex', 'items-center', 'justify-center', 'bg-gray-50'); }}
+                                            />
+                                        ) : (
+                                            <div className="mx-auto h-28 w-28 rounded-full border-4 border-amber-300 bg-gray-50 flex items-center justify-center">
+                                                <UserIcon className="h-16 w-16 text-gray-300" />
+                                            </div>
+                                        )}
                                         <h3 className="mt-4 text-xl font-semibold text-gray-900">{selectedStudent.name}</h3>
                                         <p className="mt-1 text-sm text-gray-500">
                                             {selectedStudent.class || '-'} / {selectedStudent.section || '-'}

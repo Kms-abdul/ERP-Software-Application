@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Page } from '../App';
-import { ChevronDownIcon, SearchIcon, ImportIcon, CreateStudentIcon } from './icons';
+import { ChevronDownIcon, SearchIcon, UserIcon } from './icons';
 import ComingSoon from './ComingSoon';
 import ImportStudentData from './ImportStudentData';
 import CreateStudent from './CreateStudent';
@@ -11,6 +11,7 @@ import DemoteStudents from './DemoteStudents';
 import ClassSummary from './ClassSummary';
 import MakeStudentInactive from './MakeStudentInactive';
 import SearchStudent from './SearchStudent';
+import UpdateStudentDetails from './UpdateStudentDetails';
 import { Student } from '../types';
 import api from '../api';
 
@@ -25,7 +26,7 @@ interface StudentAdministrationProps {
 type StudentAdminView =
     'students' | 'search' | 'summary' | 'reports' | 'certificates' | 'upgrade'
     | 'import' | 'addStudent' | 'viewStudent' | 'editStudent'
-    | 'inactive' | 'inactiveReport' | 'demote';
+    | 'inactive' | 'inactiveReport' | 'demote' | 'updateDetails';
 
 // ---------------------------------------------------------------------------
 // Dropdown Component
@@ -85,6 +86,7 @@ const StudentAdminHeader: React.FC<{ activeView: StudentAdminView; setActiveView
                         <button className={btn('addStudent')} onClick={() => setActiveView('addStudent')}>Create Student</button>
                         {/*<button className={btn('import')} onClick={() => setActiveView('import')}>Import</button>*/}
                         <button className={btn('search')} onClick={() => setActiveView('search')}>Search</button>
+                        <button className={btn('updateDetails')} onClick={() => setActiveView('updateDetails')}>Update Student Details</button>
                         <button className={btn('summary')} onClick={() => setActiveView('summary')}>Class Summary</button>
 
                         <Dropdown title="Report" isOpen={open === 'report'} onToggle={() => toggle('report')}>
@@ -121,17 +123,14 @@ const StudentAdminHeader: React.FC<{ activeView: StudentAdminView; setActiveView
 // ---------------------------------------------------------------------------
 // Student List Component
 // ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// Student List Component
-// ---------------------------------------------------------------------------
 
 interface ClassItem {
     id: number;
     class_name: string;
 }
 
-const StudentList: React.FC<{ onView: any; onEdit: any; setActiveView: any }> =
-    ({ onView, onEdit, setActiveView }) => {
+const StudentList: React.FC<{ onView: any; onEdit: any }> =
+    ({ onView, onEdit }) => {
 
         // Filters
         // Branch filtering is now handled globally via the MainContent dropdown.
@@ -144,7 +143,6 @@ const StudentList: React.FC<{ onView: any; onEdit: any; setActiveView: any }> =
         const [selectedClass, setSelectedClass] = useState('');
         const [selectedSection, setSelectedSection] = useState('');
         const [searchTerm, setSearchTerm] = useState('');
-        const [isAdmin, setIsAdmin] = useState(false);
         const [classOptions, setClassOptions] = useState<ClassItem[]>([]);
         const [sectionOptions, setSectionOptions] = useState<string[]>([]);
 
@@ -153,18 +151,8 @@ const StudentList: React.FC<{ onView: any; onEdit: any; setActiveView: any }> =
         const [password, setPassword] = useState('');
         const [studentToDelete, setStudentToDelete] = useState<any>(null);
 
-        // Promotion State
-        const [promoteModalOpen, setPromoteModalOpen] = useState(false);
-        const [studentToPromote, setStudentToPromote] = useState<Student | null>(null);
-
         // Load classes and students
         useEffect(() => {
-            const userStr = localStorage.getItem('user');
-            if (userStr) {
-                const u = JSON.parse(userStr);
-                setIsAdmin(u.role === 'Admin');
-            }
-
             api.get('/classes')
                 .then(res => setClassOptions(res.data.classes || []))
                 .catch(() => console.log("Failed loading classes"));
@@ -222,11 +210,6 @@ const StudentList: React.FC<{ onView: any; onEdit: any; setActiveView: any }> =
             setStudentToDelete(s);
             setPassword('');
             setPasswordModalOpen(true);
-        };
-
-        const handlePromoteClick = (s: any) => {
-            setStudentToPromote(s);
-            setPromoteModalOpen(true);
         };
 
         const handleActivate = async (s: any) => {
@@ -299,7 +282,7 @@ const StudentList: React.FC<{ onView: any; onEdit: any; setActiveView: any }> =
                                 <p>Student Profile Report</p>
                              </div>
 
-                             <img src="${s.photo || 'https://via.placeholder.com/150'}" class="photo-box" />
+                             <img src="${s.photo || ''}" class="photo-box" onerror="this.style.display='none'; this.parentElement.style.backgroundColor='#f3f4f6'; this.parentElement.style.display='flex'; this.parentElement.style.alignItems='center'; this.parentElement.style.justifyContent='center'; this.parentElement.innerHTML='<span style=\'font-size:40px;color:#9ca3af;\'>👤</span>';" />
                              <h2 style="text-align:center; border:none;">${s.name}</h2>
                              <p style="text-align:center;">${s.admNo} | Class: ${s.class} - ${s.section}</p>
 
@@ -397,7 +380,13 @@ const StudentList: React.FC<{ onView: any; onEdit: any; setActiveView: any }> =
                             {students.map(s => (
                                 <tr key={s.admNo} className="hover:bg-gray-50">
                                     <td className="px-4 py-2 flex items-center gap-2">
-                                        <img src={s.photo || 'https://via.placeholder.com/32'} className="w-8 h-8 rounded-full object-cover border" />
+                                        {s.photo ? (
+                                            <img src={s.photo} className="w-8 h-8 rounded-full object-cover border" onError={(e) => { (e.target as HTMLImageElement).style.display='none'; (e.target as HTMLImageElement).parentElement?.classList.add('bg-gray-100', 'flex', 'items-center', 'justify-center'); }} />
+                                        ) : (
+                                            <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center border">
+                                                <UserIcon className="w-5 h-5 text-gray-400" />
+                                            </div>
+                                        )}
                                         <span className="font-medium text-blue-600">{s.name}</span>
                                     </td>
                                     <td className="px-4 py-2">{s.admNo}</td>
@@ -560,7 +549,7 @@ const StudentList: React.FC<{ onView: any; onEdit: any; setActiveView: any }> =
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
-const StudentAdministration: React.FC<StudentAdministrationProps> = ({ navigateTo }) => {
+const StudentAdministration: React.FC<StudentAdministrationProps> = () => {
 
     const [activeView, setActiveView] = useState<StudentAdminView>('students');
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -572,7 +561,6 @@ const StudentAdministration: React.FC<StudentAdministrationProps> = ({ navigateT
                 return <StudentList
                     onView={(s: Student) => { setSelectedStudent(s); setActiveView('viewStudent'); }}
                     onEdit={(s: Student) => { setSelectedStudent(s); setActiveView('editStudent'); }}
-                    setActiveView={setActiveView}
                 />;
 
             case 'addStudent':
@@ -604,6 +592,9 @@ const StudentAdministration: React.FC<StudentAdministrationProps> = ({ navigateT
 
             case 'inactiveReport':
                 return <ComingSoon pageTitle="Inactive Student Report" />;
+
+            case 'updateDetails':
+                return <UpdateStudentDetails onBack={() => setActiveView('students')} />;
 
             default:
                 return <ComingSoon pageTitle="Coming Soon" />;

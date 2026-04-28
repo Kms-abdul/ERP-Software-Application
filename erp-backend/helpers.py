@@ -239,7 +239,7 @@ def student_to_dict(s):
         "rollNo": s.Roll_Number,
         "name": name,
         "first_name": s.first_name,
-        "StudnetMiddleName": s.StudentMiddleName,
+        "StudentMiddleName": s.StudentMiddleName,
         "last_name": s.last_name,
         "class": s.clazz,
         "section": s.section,
