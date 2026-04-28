@@ -297,6 +297,18 @@ def record_fee_payment(current_user):
 
     note = data.get("note", "")
     
+    #Validation for entering fields for UPI transaction id/ description if payment mode upi or online
+
+    if payment_mode in ("UPI", "CardSwap"):
+        if not transaction_id or not str(transaction_id).strip():
+            return jsonify({
+                "error": "UPI/Card Transaction ID is required for UPI and CardSwap payments."
+            }), 400
+        if not transaction_id_description or not str(transaction_id_description).strip():
+            return jsonify({
+                "error": "UPI/Card Transaction Description is required for UPI and CardSwap payments."
+            }), 400
+
     h_year, err, code = require_academic_year()
     if err:
         return err, code
