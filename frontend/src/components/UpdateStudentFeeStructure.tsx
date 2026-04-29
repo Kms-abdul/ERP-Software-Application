@@ -173,18 +173,20 @@ const UpdateStudentFeeStructure: React.FC = () => {
         }
     };
 
-    const handleAssignStandardFee = async (feeTypeId: number) => {
-        if (!selectedStudentId) return;
+    const handleAssignStandardFee = async (feeTypeIds: number[]) => {
+        if (!selectedStudentId || feeTypeIds.length === 0) return;
         try {
-            await api.post('/fees/assign-fee-type', {
-                student_id: selectedStudentId,
-                fee_type_id: feeTypeId
-            });
+            await Promise.all(feeTypeIds.map(feeTypeId =>
+                api.post('/fees/assign-fee-type', {
+                    student_id: selectedStudentId,
+                    fee_type_id: feeTypeId
+                })
+            ));
             fetchInstallments();
             setShowAssignStandardModal(false);
-            alert('Standard fee assigned successfully');
+            alert('Standard fees assigned successfully');
         } catch (error: any) {
-            alert(error.response?.data?.error || 'Failed to assign standard fee');
+            alert(error.response?.data?.error || 'Failed to assign standard fees');
         }
     };
 
@@ -503,37 +505,54 @@ const AddFeeModal: React.FC<{
 const AssignStandardFeeModal: React.FC<{
     feeTypes: FeeType[];
     onClose: () => void;
-    onSave: (feeTypeId: number) => void;
+    onSave: (feeTypeIds: number[]) => void;
 }> = ({ feeTypes, onClose, onSave }) => {
-    const [feeTypeId, setFeeTypeId] = useState<number | ''>('');
+    const [selectedFeeTypeIds, setSelectedFeeTypeIds] = useState<number[]>([]);
     const standardFeeTypes = feeTypes.filter(ft => ft.fee_type_group === 'Standard');
+
+    const handleCheckboxChange = (id: number, isChecked: boolean) => {
+        if (isChecked) {
+            setSelectedFeeTypeIds(prev => [...prev, id]);
+        } else {
+            setSelectedFeeTypeIds(prev => prev.filter(fId => fId !== id));
+        }
+    };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
             <div className="bg-white p-6 rounded-lg w-96">
-                <h3 className="text-lg font-bold mb-4">Assign Standard Fee</h3>
+                <h3 className="text-lg font-bold mb-4">Assign Standard Fees</h3>
                 <p className="text-sm text-gray-500 mb-4">
-                    Select a standard fee to assign. The amount will be automatically determined from the class fee structure.
+                    Select standard fees to assign. The amounts will be automatically determined from the class fee structure.
                 </p>
 
-                <div className="mb-6">
-                    <label className="block text-sm text-gray-600 mb-1">Standard Fee Type</label>
-                    <select
-                        value={feeTypeId}
-                        onChange={e => setFeeTypeId(Number(e.target.value))}
-                        className="w-full border rounded px-3 py-2"
-                    >
-                        <option value="">Select Fee Type</option>
-                        {standardFeeTypes.map(ft => <option key={ft.id} value={ft.id}>{ft.fee_type}</option>)}
-                    </select>
+                <div className="mb-6 max-h-60 overflow-y-auto">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Standard Fee Types</label>
+                    {standardFeeTypes.length === 0 ? (
+                        <p className="text-sm text-gray-500 italic">No standard fee types available.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {standardFeeTypes.map(ft => (
+                                <label key={ft.id} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedFeeTypeIds.includes(ft.id)}
+                                        onChange={e => handleCheckboxChange(ft.id, e.target.checked)}
+                                        className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                                    />
+                                    <span className="text-sm text-gray-700">{ft.fee_type}</span>
+                                </label>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex justify-end gap-3">
                     <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Cancel</button>
                     <button
-                        onClick={() => feeTypeId && onSave(feeTypeId as number)}
-                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                        disabled={!feeTypeId}
+                        onClick={() => selectedFeeTypeIds.length > 0 && onSave(selectedFeeTypeIds)}
+                        className={`px-4 py-2 text-white rounded ${selectedFeeTypeIds.length > 0 ? 'bg-green-600 hover:bg-green-700' : 'bg-green-300 cursor-not-allowed'}`}
+                        disabled={selectedFeeTypeIds.length === 0}
                     >
                         Assign
                     </button>
