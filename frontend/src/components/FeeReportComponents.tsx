@@ -65,6 +65,49 @@ const FilterContainer = ({ children }: { children: React.ReactNode }) => (
     </div>
 );
 
+// Reusable Pagination Component
+const Pagination = ({ currentPage, totalPages, onPageChange, totalRecords, perPage }: any) => {
+    if (totalPages <= 1) return null;
+
+    return (
+        <div className="p-4 border-t bg-gray-50 flex items-center justify-between">
+            <span className="text-sm text-gray-500 italic">
+                Showing {((currentPage - 1) * perPage) + 1} to {Math.min(currentPage * perPage, totalRecords)} of {totalRecords} records
+            </span>
+            <div className="flex items-center gap-1">
+                <button
+                    disabled={currentPage === 1}
+                    onClick={() => onPageChange(currentPage - 1)}
+                    className="px-2 py-1 text-sm font-medium text-gray-600 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-gray-600 mr-2"
+                >
+                    Previous
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                    <button
+                        key={p}
+                        onClick={() => onPageChange(p)}
+                        className={`min-w-[28px] px-1.5 py-0.5 text-sm font-semibold transition-colors ${currentPage === p
+                            ? 'text-indigo-700 underline underline-offset-4'
+                            : 'text-gray-500 hover:text-gray-800'
+                            }`}
+                    >
+                        {p}
+                    </button>
+                ))}
+
+                <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => onPageChange(currentPage + 1)}
+                    className="px-2 py-1 text-sm font-medium text-gray-600 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-gray-600 ml-2"
+                >
+                    Next
+                </button>
+            </div>
+        </div>
+    );
+};
+
 // HOOK: Dynamic Sections based on Class
 const useClassSections = (selectedClass: string) => {
     const [sections, setSections] = useState<string[]>(['All']);
@@ -194,6 +237,14 @@ const FullReceiptsTable: React.FC<{
     onViewReceipt: (id: string) => void;
     showAllColumns?: boolean;
 }> = ({ receipts, onViewReceipt, showAllColumns = true }) => {
+    const [currentPage, setCurrentPage] = useState(1);
+    const rowsPerPage = 5;
+
+    // Reset page when receipts change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [receipts]);
+
     if (!receipts || receipts.length === 0) {
         return (
             <div className="bg-red-50 text-red-500 text-center py-8 border rounded mt-4 font-medium">
@@ -201,6 +252,9 @@ const FullReceiptsTable: React.FC<{
             </div>
         );
     }
+
+    const totalPages = Math.ceil(receipts.length / rowsPerPage);
+    const currentReceipts = receipts.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
     return (
         <div className="bg-white border rounded shadow-sm overflow-x-auto mt-4 mx-4">
@@ -227,38 +281,54 @@ const FullReceiptsTable: React.FC<{
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                    {receipts.map((r: any, idx: number) => (
-                        <tr key={idx} className="hover:bg-gray-50">
-                            <td className="px-3 py-2 text-gray-500 font-medium">{idx + 1}</td>
-                            <td className="px-3 py-2 font-medium">{r.student_name}</td>
-                            <td className="px-3 py-2 text-blue-600">{r.admission_no}</td>
-                            <td className="px-3 py-2">{r.class} {r.section}</td>
-                            <td className="px-3 py-2 text-gray-600">{r.branch}</td>
-                            <td className="px-3 py-2">{r.receipt_no}</td>
-                            {showAllColumns && <td className="px-3 py-2 max-w-[200px] truncate" title={r.fee_type_str}>{r.fee_type_str || '-'}</td>}
-                            {showAllColumns && <td className="px-3 py-2 text-right">₹{(r.gross_amount || 0).toLocaleString()}</td>}
-                            {showAllColumns && <td className="px-3 py-2 text-right">₹{(r.concession || 0).toLocaleString()}</td>}
-                            {showAllColumns && <td className="px-3 py-2 text-right">₹{(r.net_payable || 0).toLocaleString()}</td>}
-                            <td className="px-3 py-2 text-right font-bold text-gray-800">₹{(r.amount_paid || r.amount || 0).toLocaleString()}</td>
-                            <td className="px-3 py-2 text-right text-red-500">₹{(r.due_amount || 0).toLocaleString()}</td>
-                            <td className="px-3 py-2">{r.mode}</td>
-                            {showAllColumns && <td className="px-3 py-2 text-xs truncate max-w-[150px]" title={r.note}>{r.note || '-'}</td>}
-                            <td className="px-3 py-2 text-xs text-gray-500">
-                                {r.date} <br /> {r.time}
-                            </td>
-                            <td className="px-3 py-2">{r.collected_by}</td>
-                            <td className="px-3 py-2 text-center">
-                                <button
-                                    onClick={() => onViewReceipt(r.receipt_no)}
-                                    className="text-white bg-violet-600 hover:bg-violet-700 px-3 py-1 rounded text-xs"
-                                >
-                                    View
-                                </button>
-                            </td>
+                    {currentReceipts.map((r: any, idx: number) => {
+                        const sNo = ((currentPage - 1) * rowsPerPage) + idx + 1;
+                        return (
+                            <tr key={idx} className="hover:bg-gray-50 h-[45px]">
+                                <td className="px-3 py-2 text-gray-500 font-medium">{sNo}</td>
+                                <td className="px-3 py-2 font-medium">{r.student_name}</td>
+                                <td className="px-3 py-2 text-blue-600">{r.admission_no}</td>
+                                <td className="px-3 py-2">{r.class} {r.section}</td>
+                                <td className="px-3 py-2 text-gray-600">{r.branch}</td>
+                                <td className="px-3 py-2">{r.receipt_no}</td>
+                                {showAllColumns && <td className="px-3 py-2 max-w-[200px] truncate" title={r.fee_type_str}>{r.fee_type_str || '-'}</td>}
+                                {showAllColumns && <td className="px-3 py-2 text-right">₹{(r.gross_amount || 0).toLocaleString()}</td>}
+                                {showAllColumns && <td className="px-3 py-2 text-right">₹{(r.concession || 0).toLocaleString()}</td>}
+                                {showAllColumns && <td className="px-3 py-2 text-right">₹{(r.net_payable || 0).toLocaleString()}</td>}
+                                <td className="px-3 py-2 text-right font-bold text-gray-800">₹{(r.amount_paid || r.amount || 0).toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right text-red-500">₹{(r.due_amount || 0).toLocaleString()}</td>
+                                <td className="px-3 py-2">{r.mode}</td>
+                                {showAllColumns && <td className="px-3 py-2 text-xs truncate max-w-[150px]" title={r.note}>{r.note || '-'}</td>}
+                                <td className="px-3 py-2 text-xs text-gray-500">
+                                    {r.date} <br /> {r.time}
+                                </td>
+                                <td className="px-3 py-2">{r.collected_by}</td>
+                                <td className="px-3 py-2 text-center">
+                                    <button
+                                        onClick={() => onViewReceipt(r.receipt_no)}
+                                        className="text-white bg-violet-600 hover:bg-violet-700 px-3 py-1 rounded text-xs"
+                                    >
+                                        View
+                                    </button>
+                                </td>
+                            </tr>
+                        );
+                    })}
+                    {/* Add empty rows to maintain height */}
+                    {currentReceipts.length < rowsPerPage && Array.from({ length: rowsPerPage - currentReceipts.length }).map((_, i) => (
+                        <tr key={`empty-${i}`} className="h-[45px]">
+                            <td colSpan={17}>&nbsp;</td>
                         </tr>
                     ))}
                 </tbody>
             </table>
+            <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                totalRecords={receipts.length}
+                perPage={rowsPerPage}
+            />
         </div>
     );
 };
@@ -1459,8 +1529,14 @@ export const DueReport: React.FC = () => {
     const [selectedSection, setSelectedSection] = useState('All');
     const [minDueAmount, setMinDueAmount] = useState<string>('');
     const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const rowsPerPage = 5;
 
     const sections = useClassSections(selectedClass);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filteredData]);
 
     useEffect(() => {
         const loadClasses = async () => {
@@ -1701,31 +1777,42 @@ export const DueReport: React.FC = () => {
                                 </td>
                             </tr>
                         ) : (
-                            filteredData.map((s, idx) => (
-                                <tr key={s.student_id || idx} className="hover:bg-gray-50">
-                                    <td className="px-4 py-3 text-gray-500">{idx + 1}</td>
-                                    <td className="px-4 py-3 font-medium text-gray-900">{s.name}</td>
-                                    <td className="px-4 py-3 text-blue-600">{s.admission_no || s.adm_no || s.admissionNo || '-'}</td>
-                                    <td className="px-4 py-3">{s.class} {s.section}</td>
-                                    <td className="px-4 py-3 text-gray-600">{s.father_name || s.father || s.parent_name || '-'}</td>
-                                    <td className="px-4 py-3">
-                                        <a href={`tel:${s.father_mobile}`} className="text-blue-600 hover:underline">
-                                            {s.father_mobile}
-                                        </a>
-                                    </td>
-                                    <td className="px-4 py-3 text-right">₹{s.total_fee?.toLocaleString('en-IN')}</td>
-                                    <td className="px-4 py-3 text-right text-green-600">
-                                        ₹{(s.paid_amount || (s.total_fee - s.due_amount))?.toLocaleString('en-IN')}
-                                    </td>
-                                    <td className="px-4 py-3 text-right font-bold text-red-600">
-                                        ₹{s.due_amount?.toLocaleString('en-IN')}
-                                    </td>
-                                </tr>
-                            ))
+                            <>
+                                {filteredData.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage).map((s, idx) => {
+                                    const sNo = ((currentPage - 1) * rowsPerPage) + idx + 1;
+                                    return (
+                                        <tr key={s.student_id || idx} className="hover:bg-gray-50 h-[45px]">
+                                            <td className="px-4 py-3 text-gray-500">{sNo}</td>
+                                            <td className="px-4 py-3 font-medium text-gray-900">{s.name}</td>
+                                            <td className="px-4 py-3 text-blue-600">{s.admission_no || s.adm_no || s.admissionNo || '-'}</td>
+                                            <td className="px-4 py-3">{s.class} {s.section}</td>
+                                            <td className="px-4 py-3 text-gray-600">{s.father_name || s.father || s.parent_name || '-'}</td>
+                                            <td className="px-4 py-3">
+                                                <a href={`tel:${s.father_mobile}`} className="text-blue-600 hover:underline">
+                                                    {s.father_mobile}
+                                                </a>
+                                            </td>
+                                            <td className="px-4 py-3 text-right">₹{s.total_fee?.toLocaleString('en-IN')}</td>
+                                            <td className="px-4 py-3 text-right text-green-600">
+                                                ₹{(s.paid_amount || (s.total_fee - s.due_amount))?.toLocaleString('en-IN')}
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-bold text-red-600">
+                                                ₹{s.due_amount?.toLocaleString('en-IN')}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {/* Empty rows for stability */}
+                                {Array.from({ length: rowsPerPage - (filteredData.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage).length) }).map((_, i) => (
+                                    <tr key={`empty-${i}`} className="h-[45px]">
+                                        <td colSpan={9}>&nbsp;</td>
+                                    </tr>
+                                ))}
+                            </>
                         )}
                     </tbody>
                     {filteredData.length > 0 && (
-                        <tfoot className="bg-gray-100 font-bold">
+                        <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-200">
                             <tr>
                                 <td colSpan={6} className="px-4 py-3 text-right">Total:</td>
                                 <td className="px-4 py-3 text-right">₹{totalFee.toLocaleString('en-IN')}</td>
@@ -1739,6 +1826,13 @@ export const DueReport: React.FC = () => {
                         </tfoot>
                     )}
                 </table>
+                <Pagination
+                    currentPage={currentPage}
+                    totalPages={Math.ceil(filteredData.length / rowsPerPage)}
+                    onPageChange={setCurrentPage}
+                    totalRecords={filteredData.length}
+                    perPage={rowsPerPage}
+                />
             </div>
 
             {/* Class-wise Due Summary */}
@@ -1777,8 +1871,14 @@ export const LateFeeDueReport: React.FC = () => {
     const [selectedSection, setSelectedSection] = useState('All');
     const [minDueAmount, setMinDueAmount] = useState<string>('');
     const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const rowsPerPage = 5;
 
     const sections = useClassSections(selectedClass);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filteredData]);
 
     useEffect(() => {
         const loadClasses = async () => {
@@ -2019,31 +2119,42 @@ export const LateFeeDueReport: React.FC = () => {
                                 </td>
                             </tr>
                         ) : (
-                            filteredData.map((s, idx) => (
-                                <tr key={s.student_id || idx} className="hover:bg-gray-50">
-                                    <td className="px-4 py-3 text-gray-500">{idx + 1}</td>
-                                    <td className="px-4 py-3 font-medium text-gray-900">{s.name}</td>
-                                    <td className="px-4 py-3 text-blue-600">{s.admission_no || s.adm_no || s.admissionNo || '-'}</td>
-                                    <td className="px-4 py-3">{s.class} {s.section}</td>
-                                    <td className="px-4 py-3 text-gray-600">{s.father_name || s.father || s.parent_name || '-'}</td>
-                                    <td className="px-4 py-3">
-                                        <a href={`tel:${s.father_mobile}`} className="text-blue-600 hover:underline">
-                                            {s.father_mobile}
-                                        </a>
-                                    </td>
-                                    <td className="px-4 py-3 text-right">₹{s.total_fee?.toLocaleString('en-IN')}</td>
-                                    <td className="px-4 py-3 text-right text-green-600">
-                                        ₹{(s.paid_amount || (s.total_fee - s.due_amount))?.toLocaleString('en-IN')}
-                                    </td>
-                                    <td className="px-4 py-3 text-right font-bold text-red-600">
-                                        ₹{s.due_amount?.toLocaleString('en-IN')}
-                                    </td>
-                                </tr>
-                            ))
+                            <>
+                                {filteredData.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage).map((s, idx) => {
+                                    const sNo = ((currentPage - 1) * rowsPerPage) + idx + 1;
+                                    return (
+                                        <tr key={s.student_id || idx} className="hover:bg-gray-50 h-[45px]">
+                                            <td className="px-4 py-3 text-gray-500">{sNo}</td>
+                                            <td className="px-4 py-3 font-medium text-gray-900">{s.name}</td>
+                                            <td className="px-4 py-3 text-blue-600">{s.admission_no || s.adm_no || s.admissionNo || '-'}</td>
+                                            <td className="px-4 py-3">{s.class} {s.section}</td>
+                                            <td className="px-4 py-3 text-gray-600">{s.father_name || s.father || s.parent_name || '-'}</td>
+                                            <td className="px-4 py-3">
+                                                <a href={`tel:${s.father_mobile}`} className="text-blue-600 hover:underline">
+                                                    {s.father_mobile}
+                                                </a>
+                                            </td>
+                                            <td className="px-4 py-3 text-right">₹{s.total_fee?.toLocaleString('en-IN')}</td>
+                                            <td className="px-4 py-3 text-right text-green-600">
+                                                ₹{(s.paid_amount || (s.total_fee - s.due_amount))?.toLocaleString('en-IN')}
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-bold text-red-600">
+                                                ₹{s.due_amount?.toLocaleString('en-IN')}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {/* Empty rows for stability */}
+                                {Array.from({ length: rowsPerPage - (filteredData.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage).length) }).map((_, i) => (
+                                    <tr key={`empty-${i}`} className="h-[45px]">
+                                        <td colSpan={9}>&nbsp;</td>
+                                    </tr>
+                                ))}
+                            </>
                         )}
                     </tbody>
                     {filteredData.length > 0 && (
-                        <tfoot className="bg-gray-100 font-bold">
+                        <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-200">
                             <tr>
                                 <td colSpan={6} className="px-4 py-3 text-right">Total:</td>
                                 <td className="px-4 py-3 text-right">₹{totalFee.toLocaleString('en-IN')}</td>
@@ -2057,6 +2168,13 @@ export const LateFeeDueReport: React.FC = () => {
                         </tfoot>
                     )}
                 </table>
+                <Pagination
+                    currentPage={currentPage}
+                    totalPages={Math.ceil(filteredData.length / rowsPerPage)}
+                    onPageChange={setCurrentPage}
+                    totalRecords={filteredData.length}
+                    perPage={rowsPerPage}
+                />
             </div>
 
             {/* Class-wise Due Summary */}

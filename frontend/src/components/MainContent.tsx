@@ -2,16 +2,17 @@ import React, { useState } from 'react';
 import { Page } from '../App';
 import { SearchIcon, TimeIcon, ChevronDownIcon } from './icons';
 import SummaryBar from './SummaryBar';
+import dashboardImg from '../images/Dashboard.png';
 
 interface MainContentProps {
-    navigateTo: (page: Page) => void; 
+    navigateTo: (page: Page) => void;
 }
 
 interface WelcomeBarProps {
     navigateTo: (page: Page) => void;
 }
 const WelcomeBar: React.FC<WelcomeBarProps> = ({ navigateTo }) => {
-    
+
     const menuItems = [
         { name: 'Fee', icon: 'https://cdn-icons-png.flaticon.com/512/1001/1001096.png', page: 'fee' as Page },
         { name: 'Admission', icon: 'https://cdn-icons-png.flaticon.com/512/3063/3063820.png', page: 'dashboard' as Page },
@@ -57,7 +58,7 @@ const WelcomeBar: React.FC<WelcomeBarProps> = ({ navigateTo }) => {
     const handleBranchChange = (branchId: string) => {
         localStorage.setItem('currentBranch', branchId);
         setCurrentBranch(branchId);
-               window.location.reload();
+        window.location.reload();
     };
 
     const currentBranchName = branchOptions.find(b => b.id === currentBranch)?.name || currentBranch;
@@ -69,7 +70,7 @@ const WelcomeBar: React.FC<WelcomeBarProps> = ({ navigateTo }) => {
                     <div className="py-4 flex items-center">
                         <h2 className="text-xl text-gray-800 mr-4">Welcome, <span className="font-semibold">{user?.username || 'User'}</span></h2>
 
-                        
+
 
                     </div>
                     <div className="flex items-center space-x-1 sm:space-x-4 overflow-x-auto py-2">
@@ -92,16 +93,16 @@ const WelcomeBar: React.FC<WelcomeBarProps> = ({ navigateTo }) => {
 
 const DashboardHome: React.FC = () => {
     return (
-        <div className="p-4 md:p-6 space-y-6">
+        <div className="p-2 md:p-2 space-y-2">
             <SummaryBar />
-            <div className="relative max-w-sm mx-auto">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    
-                </div>
-                
+            <div className="flex justify-center w-full mt-14">
+                <img
+                    src={dashboardImg}
+                    alt="Dashboard Illustration"
+                    className="max-w-full h-auto rounded-lg shadow-sm"
+                    style={{ maxHeight: '55vh', objectFit: 'contain' }}
+                />
             </div>
-
-            
         </div>
     );
 };

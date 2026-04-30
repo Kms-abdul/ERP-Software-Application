@@ -4,18 +4,14 @@ import { TrashIcon, PrinterIcon } from './icons';
 import FeeReceipt from './FeeReceipt';
 import { Page } from '../App';
 
-
 // Removed monthOrder in favor of Sr based dynamic grouping
 
-
 const groupInstallments = (items: any[]) => {
-    // Separate Installment Fees from Others (e.g. Admission Fee, Special Fee)
     const installmentFees = items.filter(i => i.installment && i.installment !== "One-Time" && i.installment !== "None");
     const otherFees = items.filter(i => !i.installment || i.installment === "One-Time" || i.installment === "None");
 
     const groups: any[] = [];
 
-    // Group Installments by Fee Type
     const byType: Record<string, any[]> = {};
     installmentFees.forEach(i => {
         const type = i.fee_type || "Tuition Fee";
@@ -23,11 +19,8 @@ const groupInstallments = (items: any[]) => {
         byType[type].push(i);
     });
 
-    // Process each Fee Type
     Object.keys(byType).forEach(type => {
-        // Sort by sr (Serial Number) if available
         const sorted = byType[type].sort((a, b) => (a.sr || 0) - (b.sr || 0));
-
         if (sorted.length === 0) return;
 
         let currentGroup = [sorted[0]];
@@ -35,28 +28,21 @@ const groupInstallments = (items: any[]) => {
         for (let i = 1; i < sorted.length; i++) {
             const prev = currentGroup[currentGroup.length - 1];
             const curr = sorted[i];
-
             const prevSr = prev.sr || 0;
             const currSr = curr.sr || 0;
 
-            // Check if consecutive by SR
-            // If SRs are missing or 0, we can't reliably group by sequence, so we split.
-            // Assumption: SR is 1-based index (1, 2, 3...)
             if (prevSr > 0 && currSr > 0 && currSr === prevSr + 1) {
                 currentGroup.push(curr);
             } else {
-                // Push current group and start new
                 groups.push(createGroupedItem(type, currentGroup));
                 currentGroup = [curr];
             }
         }
-        // Push last group
         if (currentGroup.length > 0) {
             groups.push(createGroupedItem(type, currentGroup));
         }
     });
 
-    // Add other fees as is
     otherFees.forEach(f => {
         groups.push({
             title: f.fee_type === "General" ? "One-Time Fee" : f.fee_type,
@@ -81,13 +67,13 @@ const createGroupedItem = (type: string, items: any[]) => {
 
     const totalPaid = items.reduce((sum: number, i: any) => sum + parseFloat(i.amount_paid), 0);
     const totalConcession = items.reduce((sum: number, i: any) => sum + parseFloat(i.concession_amount), 0);
-    const totalGross = items.reduce((sum: number, i: any) => sum + parseFloat(i.gross_amount || i.amount_paid), 0); // Fallback if gross missing
+    const totalGross = items.reduce((sum: number, i: any) => sum + parseFloat(i.gross_amount || i.amount_paid), 0);
 
     return {
         title,
-        amount: totalPaid, // Paid Amount
+        amount: totalPaid,
         concession: totalConcession,
-        payable: totalGross, // Gross Amount for table display
+        payable: totalGross,
         originalItems: items
     };
 };
@@ -138,10 +124,13 @@ interface Concession {
     items: ConcessionItem[];
 }
 
-
-
-
-const InfoCard: React.FC<{ title: string; value: string; bgColor: string; textColor: string; icon: React.ReactNode; }> = ({ title, value, bgColor, textColor, icon }) => (
+const InfoCard: React.FC<{
+    title: string;
+    value: string;
+    bgColor: string;
+    textColor: string;
+    icon: React.ReactNode;
+}> = ({ title, value, bgColor, textColor, icon }) => (
     <div className={`p-2 rounded-lg text-center ${bgColor}`}>
         <p className={`text-xs font-semibold ${textColor}`}>{title}</p>
         <div className="flex items-center justify-center space-x-1">
@@ -151,11 +140,14 @@ const InfoCard: React.FC<{ title: string; value: string; bgColor: string; textCo
     </div>
 );
 
-
-const InstallmentRow: React.FC<{ installment: FeeInstallment; isSelected: boolean; onSelect: (sr: number) => void; isDisabled: boolean; }> = ({ installment, isSelected, onSelect, isDisabled }) => {
+const InstallmentRow: React.FC<{
+    installment: FeeInstallment;
+    isSelected: boolean;
+    onSelect: (sr: number) => void;
+    isDisabled: boolean;
+}> = ({ installment, isSelected, onSelect, isDisabled }) => {
     const { sr, title, payable, paid, paidAmount, dueAmount, concession } = installment;
 
-    // Use backend dueAmount if available, otherwise calculate
     const due = dueAmount !== undefined ? dueAmount : (payable - (paidAmount || 0));
     const isPartial = !paid && (paidAmount || 0) > 0;
     const isFullyPaid = paid || due <= 0;
@@ -176,13 +168,11 @@ const InstallmentRow: React.FC<{ installment: FeeInstallment; isSelected: boolea
         details = `Payable = ${payable}`;
         if (concession && concession > 0) details += `, Concession = ${concession}`;
         details += `, Paid = ${paidAmount}, Due = ${due}`;
-        // Highlight in red/pink as requested for partial/due
         rowClass = "bg-red-50 text-red-800 hover:bg-red-100";
     } else if (due > 0) {
         details = `Payable = ${payable}`;
         if (concession && concession > 0) details += `, Concession = ${concession}`;
         details += `, Due = ${due}`;
-        // Highlight in red/pink for unpaid
         rowClass = "bg-red-50 text-red-800 hover:bg-red-100";
     }
 
@@ -197,14 +187,17 @@ const InstallmentRow: React.FC<{ installment: FeeInstallment; isSelected: boolea
     return (
         <tr className={rowClass}>
             <td className="border px-2 py-2 text-center">
-                {isFullyPaid ? <span className="text-green-600 font-bold">✔</span> :
+                {isFullyPaid ? (
+                    <span className="text-green-600 font-bold">✔</span>
+                ) : (
                     <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => !isDisabled && onSelect(sr)}
                         disabled={isDisabled}
                         className="h-4 w-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    />}
+                    />
+                )}
             </td>
             <td className="border px-2 py-2 text-center text-sm text-gray-600">{sr}</td>
             <td className="border px-2 py-2 text-sm text-gray-800">{title}</td>
@@ -214,7 +207,6 @@ const InstallmentRow: React.FC<{ installment: FeeInstallment; isSelected: boolea
 };
 
 const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
-    // State for students and filtering
     const [students, setStudents] = useState<FeeStudent[]>([]);
     const [classes, setClasses] = useState<string[]>([]);
     const [sectionOptions, setSectionOptions] = useState<string[]>([]);
@@ -223,8 +215,19 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
     const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
-    const selectedStudent = useMemo(() =>
-        students.find(s => s.student_id === selectedStudentId),
+    // ─── Role-Based Access Control ───────────────────────────────────────────────
+    // Reads the user role from localStorage (set during login).
+    // Only users with role "admin" can cancel/delete receipts.
+    let isAdmin = false;
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        isAdmin = user.role === 'Admin';
+    } catch {
+        // Malformed JSON in localStorage; default to non-admin
+    }
+    // ─────────────────────────────────────────────────────────────────────────────
+    const selectedStudent = useMemo(
+        () => students.find(s => s.student_id === selectedStudentId),
         [students, selectedStudentId]
     );
 
@@ -248,7 +251,9 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
     const fetchPaymentHistory = async () => {
         if (!selectedStudent) return;
         try {
-            const response = await api.get(`/fees/payments/${selectedStudent.student_id}?show_cancelled=${showCancelled}`);
+            const response = await api.get(
+                `/fees/payments/${selectedStudent.student_id}?show_cancelled=${showCancelled}`
+            );
             setPaymentHistory(response.data);
             setShowHistory(true);
         } catch (error) {
@@ -264,7 +269,18 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
     }, [showCancelled]);
 
     const handleDeleteReceipt = async (receiptNo: string) => {
-        if (!window.confirm("Are you sure you want to cancel this ENTIRE RECEIPT? This will revert all associated fee payments.")) return;
+        // Guard: only admins can cancel receipts
+        if (!isAdmin) {
+            alert("Access Denied: Only administrators are allowed to cancel receipts.");
+            return;
+        }
+
+        if (
+            !window.confirm(
+                "Are you sure you want to cancel this ENTIRE RECEIPT? This will revert all associated fee payments."
+            )
+        )
+            return;
 
         const reason = prompt("Please enter a valid reason for cancellation:");
         if (!reason || reason.trim() === "") {
@@ -272,69 +288,59 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
             return;
         }
 
-        // Find all payments with this receipt no
         const paymentsToDelete = paymentHistory.filter(p => p.receipt_no === receiptNo);
 
         try {
-            // Delete sequentially
             for (const p of paymentsToDelete) {
                 await api.delete(`/fees/payment/${p.payment_id}`, {
-                    data: { reason: reason }
+                    data: { reason }
                 });
             }
 
             alert("Receipt cancelled successfully.");
-            fetchPaymentHistory(); // Refresh history
+            fetchPaymentHistory();
 
-            // Refresh main installments view
             if (selectedStudent) {
                 const globalBranch = localStorage.getItem('currentBranch') || 'All';
-                const branchParam = globalBranch === "All Branches" || globalBranch === "All" ? "All" : globalBranch;
-                const response = await api.get(`/fees/student-details/${selectedStudent.student_id}?branch=${branchParam}`);
+                const branchParam =
+                    globalBranch === "All Branches" || globalBranch === "All" ? "All" : globalBranch;
+                const response = await api.get(
+                    `/fees/student-details/${selectedStudent.student_id}?branch=${branchParam}`
+                );
                 setInstallments(response.data.installments || []);
             }
-
         } catch (error: any) {
             console.error("Error deleting receipt:", error);
             alert(error.response?.data?.error || "Failed to delete receipt.");
         }
     };
 
-
     const handlePrintHistoryReceipt = (receiptNo: string) => {
         const payments = paymentHistory.filter(p => p.receipt_no === receiptNo);
         if (payments.length === 0) return;
 
-        // Calculate totals
         const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount_paid), 0);
         const totalConcession = payments.reduce((sum, p) => sum + parseFloat(p.concession_amount), 0);
-        const totalGross = payments.reduce((sum, p) => sum + parseFloat(p.gross_amount || 0), 0) || (totalPaid + totalConcession);
+        const totalGross =
+            payments.reduce((sum, p) => sum + parseFloat(p.gross_amount || 0), 0) ||
+            totalPaid + totalConcession;
         const totalDue = payments.reduce((sum, p) => sum + parseFloat(p.due_amount || 0), 0);
-
         const netPayable = totalGross - totalConcession;
 
-
-        // Map history items to include SR from the main installments list
-        // This is critical for the generic grouping logic to work
         const enrichedPayments = payments.map(p => {
-            // Find matching installment by Title (since ID is not available in history)
-            // Backend might store "March" while frontend title is "March Fee"
-            const match = installments.find(i => i.title === p.installment || i.title === `${p.installment} Fee`);
-            return {
-                ...p,
-                sr: match ? match.sr : 0 // 0 will prevent grouping
-            };
+            const match = installments.find(
+                i => i.title === p.installment || i.title === `${p.installment} Fee`
+            );
+            return { ...p, sr: match ? match.sr : 0 };
         });
 
-        // Create Grouped Items
         const groupedItems = groupInstallments(enrichedPayments);
 
-        // Map to Receipt Item format
         const items = groupedItems.map((g, index) => ({
             sr: index + 1,
             title: g.title,
             payable: g.payable,
-            dueAmount: 0, // Not relevant for paid history receipt receipt
+            dueAmount: 0,
             paidAmount: g.amount,
             concession: g.concession,
             paid: true
@@ -351,7 +357,7 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
             paymentDate: payments[0].payment_date,
             paymentMode: payments[0].mode,
             paymentNote: "",
-            items: items,
+            items,
             amount: totalGross,
             concession: totalConcession,
             payable: netPayable,
@@ -364,12 +370,10 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
     };
 
     const filteredInstallments = useMemo(() => {
-        if (!selectedFeeType) return []; // Hide if no fee type selected
+        if (!selectedFeeType) return [];
         return installments.filter(i => i.fee_type_id === Number(selectedFeeType));
     }, [installments, selectedFeeType]);
 
-
-    // Fetch Fee Types
     useEffect(() => {
         const fetchFeeTypes = async () => {
             try {
@@ -390,25 +394,11 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
         if (!feeTypeIdStr || !selectedStudent) return;
 
         const feeTypeId = Number(feeTypeIdStr);
-
-        // CHECK IF ALREADY EXISTS
         const exists = installments.some(i => i.fee_type_id === feeTypeId);
-        if (exists) {
-            // Already exists, maybe filter view? For now just ensure it's there.
-            return;
-        }
+        if (exists) return;
 
-        // IF MISSING -> ASSIGN
-        // The user implied "has to be created". We'll do it automatically or with confirmation.
-        // Given "Take Fee" context, confirmation is safer but usually user actions imply intent.
-        // I'll add a confirmation to be safe.
-        if (window.confirm("This fee type is not assigned to the student.")) {
-            // Do nothing - just informing the user
-        }
+        alert("This fee type is not assigned to the student.");
     };
-
-
-    // Fetch Concessions
     useEffect(() => {
         const fetchConcessions = async () => {
             try {
@@ -430,10 +420,6 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
     const [transactionId, setTransactionId] = useState('');
     const [transactionIdDescription, setTransactionIdDescription] = useState('');
 
-    // Initialize User Role
-
-
-    // Fetch classes on mount
     useEffect(() => {
         const fetchClasses = async () => {
             try {
@@ -454,16 +440,11 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                 setSelectedSection('');
                 return;
             }
-
             try {
                 const branch = localStorage.getItem('currentBranch') || 'All';
                 const academicYear = localStorage.getItem('academicYear') || '';
                 const response = await api.get('/sections', {
-                    params: {
-                        class: selectedClass,
-                        branch,
-                        academic_year: academicYear,
-                    }
+                    params: { class: selectedClass, branch, academic_year: academicYear }
                 });
                 setSectionOptions(response.data.sections || []);
             } catch (error) {
@@ -471,11 +452,9 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                 setSectionOptions([]);
             }
         };
-
         fetchSections();
     }, [selectedClass]);
 
-    // Fetch students when filters change (Backend Filtering)
     useEffect(() => {
         const fetchStudents = async () => {
             try {
@@ -485,27 +464,31 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                 if (searchTerm) params.append('search', searchTerm);
 
                 const globalBranch = localStorage.getItem('currentBranch') || 'All';
-                params.append("branch", globalBranch === "All Branches" || globalBranch === "All" ? "All" : globalBranch);
+                params.append(
+                    "branch",
+                    globalBranch === "All Branches" || globalBranch === "All" ? "All" : globalBranch
+                );
                 const response = await api.get(`/fees/students?${params.toString()}`);
-
                 const { data } = response;
-                setStudents(Array.isArray(data) ? data : (data.students || []));
+                setStudents(Array.isArray(data) ? data : data.students || []);
             } catch (error) {
                 console.error('Error fetching students:', error);
                 setStudents([]);
             }
         };
         fetchStudents();
-    }, [selectedClass, selectedSection, searchTerm]); // Removed selectedBranch dependency
+    }, [selectedClass, selectedSection, searchTerm]);
 
-    // Fetch installments when student is selected
     useEffect(() => {
         const fetchInstallments = async () => {
             if (selectedStudent) {
                 try {
                     const globalBranch = localStorage.getItem('currentBranch') || 'All';
-                    const branchParam = globalBranch === "All Branches" || globalBranch === "All" ? "All" : globalBranch;
-                    const response = await api.get(`/fees/student-details/${selectedStudent.student_id}?branch=${branchParam}`);
+                    const branchParam =
+                        globalBranch === "All Branches" || globalBranch === "All" ? "All" : globalBranch;
+                    const response = await api.get(
+                        `/fees/student-details/${selectedStudent.student_id}?branch=${branchParam}`
+                    );
                     setInstallments(response.data.installments || []);
                 } catch (error) {
                     console.error('Error fetching installments:', error);
@@ -515,42 +498,34 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                 setInstallments([]);
             }
             handleReset();
-            // Reset concession state specifically when student changes
             setSelectedConcession('0');
             setAppliedConcession(0);
             setItemConcessions({});
             setShowCancelled(false);
         };
         fetchInstallments();
-    }, [selectedStudent]); // Removed selectedBranch dependency
+    }, [selectedStudent]);
 
     useEffect(() => {
         if (!installments || installments.length === 0) {
             setSummary({ totalPaids: 0, totalDue: 0, currentDue: 0 });
             return;
-        };
-
-        const paids = installments.filter(i => i.paid).reduce((sum, i) => sum + (i.paidAmount || i.payable), 0);
+        }
+        const paids = installments
+            .filter(i => i.paid)
+            .reduce((sum, i) => sum + (i.paidAmount || i.payable), 0);
         const dues = installments.filter(i => !i.paid);
         const totalDue = dues.reduce((sum, i) => sum + i.payable, 0);
         const currentDue = dues.length > 0 ? dues[0].payable : 0;
-
-        setSummary({
-            totalPaids: paids,
-            totalDue: totalDue,
-            currentDue: currentDue
-        });
+        setSummary({ totalPaids: paids, totalDue, currentDue });
     }, [installments]);
 
     const handleSelect = (sr: number) => {
         setSelectedIds(prev => {
             const isCurrentlySelected = prev.includes(sr);
-
             if (isCurrentlySelected) {
-                // Unselecting - also unselect all fees after this one
                 return prev.filter(id => id < sr);
             } else {
-                // Selecting - add this fee
                 return [...prev, sr].sort((a, b) => a - b);
             }
         });
@@ -572,41 +547,23 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
 
         let totalDiscount = 0;
         const newItemConcessions: Record<number, number> = {};
-        const selectedItems = installments.filter(i => selectedIds.includes(i.sr));
-
-        console.log("DEBUG: Applying Concession:", concession);
-        console.log("DEBUG: Selected Items:", selectedItems);
-
+        const selectedItemsList = installments.filter(i => selectedIds.includes(i.sr));
         const skippedItems: string[] = [];
 
-        for (const item of selectedItems) {
-            // Find matching rule for this fee type
+        for (const item of selectedItemsList) {
             const rule = concession.items.find(i => i.fee_type_id === item.fee_type_id);
-            console.log(`DEBUG: Checking item ${item.title} (FeeTypeID: ${item.fee_type_id}) -> Match:`, rule);
-
             if (rule) {
-                // Check if fee already has a concession (from backend)
-                if ((item.concession || 0) > 0) {
-                    console.log(`DEBUG: Skipping ${item.title} - Already has concession: ${item.concession}`);
-                    continue;
-                }
-
-                // Check If Payment is Before Last Pay Date (Due Date)
+                if ((item.concession || 0) > 0) continue;
                 if (item.due_date && paymentDate > item.due_date) {
-                    console.log(`DEBUG: Skipping ${item.title} - Payment Date (${paymentDate}) is after Due Date (${item.due_date})`);
                     skippedItems.push(`${item.title} (Due: ${item.due_date})`);
                     continue;
                 }
-
-                // Calculate discount based on the amount being paid (payable or dueAmount)
-                const amountToPay = (item.dueAmount !== undefined && item.dueAmount > 0) ? item.dueAmount : item.payable;
-
+                const amountToPay =
+                    item.dueAmount !== undefined && item.dueAmount > 0 ? item.dueAmount : item.payable;
                 let discount = 0;
                 if (concession.is_percentage) {
                     discount = amountToPay * (rule.percentage / 100);
                 } else {
-                    // If flat amount, we assume the percentage field holds the flat amount
-                    // We might need to handle cases where flat amount > amountToPay
                     discount = Math.min(amountToPay, rule.percentage);
                 }
                 discount = Math.round(discount);
@@ -615,21 +572,21 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
             }
         }
 
-        console.log("DEBUG: Total Discount:", totalDiscount);
         setItemConcessions(newItemConcessions);
         setAppliedConcession(totalDiscount);
 
         if (skippedItems.length > 0) {
-            alert(`Concession was NOT applied to the following installments because the Payment Date (${paymentDate}) is after the Due Date:\n\n- ${skippedItems.join('\n- ')}`);
+            alert(
+                `Concession was NOT applied to the following installments because the Payment Date (${paymentDate}) is after the Due Date:\n\n- ${skippedItems.join('\n- ')}`
+            );
         }
     };
 
     const selectedItems = installments.filter(i => selectedIds.includes(i.sr));
 
-    // Calculate total amount to pay - use dueAmount for partial/unpaid, or payable for new fees
     const amount = selectedItems.reduce((sum, item) => {
-        // If there's a dueAmount > 0, use that; otherwise use payable
-        const amountToPay = (item.dueAmount !== undefined && item.dueAmount > 0) ? item.dueAmount : item.payable;
+        const amountToPay =
+            item.dueAmount !== undefined && item.dueAmount > 0 ? item.dueAmount : item.payable;
         return sum + amountToPay;
     }, 0);
 
@@ -661,29 +618,15 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
         }
 
         try {
-            // Sequential allocation: Fill installments in order
             let remainingAmount = Number(paidInput);
 
-            // Prepare allocations
             const feeAllocations = selectedItems.map((item: FeeInstallment) => {
-                // Calculate how much this installment needs
-                // Calculate how much this installment needs
-                // If there's a concession being applied NOW, we need to subtract it from the amount needed
                 const currentConcession = itemConcessions[item.sr] || 0;
-
-                let grossAmountNeeded = (item.dueAmount !== undefined && item.dueAmount > 0)
-                    ? item.dueAmount
-                    : item.payable;
-
-                // The actual cash needed is Gross - Concession
+                let grossAmountNeeded =
+                    item.dueAmount !== undefined && item.dueAmount > 0 ? item.dueAmount : item.payable;
                 const amountNeeded = Math.max(0, grossAmountNeeded - currentConcession);
-
-                // Allocate up to what's needed, but not more than what's remaining
                 const allocatedAmount = Math.min(amountNeeded, remainingAmount);
-
-                // Deduct from remaining amount
                 remainingAmount -= allocatedAmount;
-
                 return {
                     student_fee_id: item.student_fee_id,
                     amount: allocatedAmount,
@@ -691,39 +634,38 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                 };
             });
 
-            // Call Backend
             const globalBranch = localStorage.getItem('currentBranch') || 'All';
-            const branchParam = globalBranch === "All Branches" || globalBranch === "All" ? "All" : globalBranch;
+            const branchParam =
+                globalBranch === "All Branches" || globalBranch === "All" ? "All" : globalBranch;
             const response = await api.post(`/fees/payment?branch=${branchParam}`, {
                 student_id: selectedStudent.student_id,
                 amount_paid: Number(paidInput),
                 payment_mode: paymentMode,
                 payment_date: paymentDate,
                 note: paymentNote,
-                receipt_no: schoolReceiptNo, // Pass the manual receipt number
+                receipt_no: schoolReceiptNo,
                 transaction_id: transactionId,
                 transaction_id_description: transactionIdDescription,
                 fee_allocations: feeAllocations
             });
-            // Backend returns receipt_no
+
             const realReceiptNo = response.data.receipt_no;
 
-            // Prepare Grouped Items for Receipt (Consistent with History)
             const receiptLineItemsRaw = selectedItems.map((item: FeeInstallment, index: number) => {
                 const alloc = feeAllocations[index];
+                const feeTypeMatch = feeTypes.find(ft => ft.id === item.fee_type_id);
                 return {
                     installment: item.title,
-                    fee_type: "Tuition Fee", // Default or fetch if available
+                    fee_type: feeTypeMatch?.fee_type || "Tuition Fee",
                     sr: item.sr,
                     amount_paid: alloc.amount,
                     concession_amount: alloc.concession_amount,
-                    gross_amount: (item.dueAmount !== undefined && item.dueAmount > 0) ? item.dueAmount : item.payable
+                    gross_amount:
+                        item.dueAmount !== undefined && item.dueAmount > 0 ? item.dueAmount : item.payable
                 };
             });
-
             const groupedReceiptItems = groupInstallments(receiptLineItemsRaw);
 
-            // Show Receipt with Real Data
             const data = {
                 studentName: selectedStudent.name,
                 fatherName: selectedStudent.fatherName,
@@ -731,21 +673,20 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                 admissionNo: selectedStudent.admNo,
                 branch: selectedStudent.branch,
                 className: selectedStudent.class,
-                receiptNo: realReceiptNo, // Use backend receipt
+                receiptNo: realReceiptNo,
                 paymentDate,
                 paymentMode,
                 paymentNote,
-                items: groupedReceiptItems, // Use Grouped Items
+                items: groupedReceiptItems,
                 amount,
                 concession: appliedConcession,
-                payable: payable, // Net Payable (Amount - Concession)
+                payable,
                 paid: Number(paidInput),
-                due: due,
+                due
             };
             setReceiptData(data);
             setShowReceipt(true);
 
-            // Refresh student list
             const params = new URLSearchParams();
             if (selectedClass) params.append('class', selectedClass);
             if (selectedSection) params.append('section', selectedSection);
@@ -753,12 +694,12 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
 
             const stResponse = await api.get(`/fees/students?${params}`);
             const stData = stResponse.data;
-            setStudents(Array.isArray(stData) ? stData : (stData.students || []));
+            setStudents(Array.isArray(stData) ? stData : stData.students || []);
 
-            // Refresh installments
-            const instResponse = await api.get(`/fees/student-details/${selectedStudent.student_id}?branch=${branchParam}`);
+            const instResponse = await api.get(
+                `/fees/student-details/${selectedStudent.student_id}?branch=${branchParam}`
+            );
             setInstallments(instResponse.data.installments || []);
-
         } catch (error: any) {
             console.error('Error recording payment:', error);
             alert(error.response?.data?.error || "Failed to record payment");
@@ -780,12 +721,12 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                         {/* Left Column */}
                         <div className="lg:col-span-3 space-y-4">
-                            <h3 className="text-lg font-semibold text-gray-800 flex items-center"><RupeeIcon />&nbsp;Take Fee</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                                <RupeeIcon />&nbsp;Take Fee
+                            </h3>
 
                             <div className="p-4 border rounded-lg shadow-sm bg-violet-50/50 space-y-3">
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-
-
                                     <input
                                         type="text"
                                         placeholder="Search Adm No or Name..."
@@ -810,7 +751,9 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                         className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500 text-sm"
                                     >
                                         <option value="">-- Select Section --</option>
-                                        {sectionOptions.map(section => <option key={section} value={section}>{section}</option>)}
+                                        {sectionOptions.map(section => (
+                                            <option key={section} value={section}>{section}</option>
+                                        ))}
                                     </select>
                                     <select
                                         value={selectedFeeType}
@@ -831,43 +774,76 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                         className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500 text-sm"
                                     >
                                         <option value="">-- Select Student --</option>
-                                        {students.map(s => <option key={s.student_id} value={s.student_id}>{s.name} ({s.admNo})</option>)}
+                                        {students.map(s => (
+                                            <option key={s.student_id} value={s.student_id}>
+                                                {s.name} ({s.admNo})
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
                                 <div className="flex items-center space-x-2">
-                                    <button className="text-sm px-3 py-1.5 border rounded-md hover:bg-gray-100">Download QR</button>
-                                    <button className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700">Student</button>
+                                    <button className="text-sm px-3 py-1.5 border rounded-md hover:bg-gray-100">
+                                        Download QR
+                                    </button>
+                                    <button className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                                        Student
+                                    </button>
                                 </div>
                             </div>
 
-                            {selectedStudent && <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                <InfoCard title="Total Paids" value={summary.totalPaids.toLocaleString()} bgColor="bg-green-100" textColor="text-green-800" icon={<RupeeIcon />} />
-                                <InfoCard title="Current Due" value={summary.currentDue.toLocaleString()} bgColor="bg-blue-100" textColor="text-blue-800" icon={<RupeeIcon />} />
-                                <InfoCard title="Total Due" value={summary.totalDue.toLocaleString()} bgColor="bg-orange-100" textColor="text-orange-800" icon={<RupeeIcon />} />
-                                {/*<InfoCard title="Refund Amount" value="0" bgColor="bg-red-100" textColor="text-red-800" icon={<RupeeIcon />} />
-                                <InfoCard title="Voucher Due" value="0" bgColor="bg-indigo-100" textColor="text-indigo-800" icon={<RupeeIcon />} />*/}
-                            </div>}
+                            {selectedStudent && (
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                    <InfoCard
+                                        title="Total Paids"
+                                        value={summary.totalPaids.toLocaleString()}
+                                        bgColor="bg-green-100"
+                                        textColor="text-green-800"
+                                        icon={<RupeeIcon />}
+                                    />
+                                    <InfoCard
+                                        title="Current Due"
+                                        value={summary.currentDue.toLocaleString()}
+                                        bgColor="bg-blue-100"
+                                        textColor="text-blue-800"
+                                        icon={<RupeeIcon />}
+                                    />
+                                    <InfoCard
+                                        title="Total Due"
+                                        value={summary.totalDue.toLocaleString()}
+                                        bgColor="bg-orange-100"
+                                        textColor="text-orange-800"
+                                        icon={<RupeeIcon />}
+                                    />
+                                </div>
+                            )}
 
                             <div className="flex items-center justify-between">
-                                <h4 className="font-semibold text-gray-700">Details <span className="text-sm text-black-500 font-normal ml-3">
-                                    {selectedStudent ? `Student Name: ${selectedStudent.name} || FatherName: ${selectedStudent.fatherName} 
-                            || Adm No: ${selectedStudent.admNo} || Phone: ${selectedStudent.fatherPhone}` : 'Details : N/A'}
-                                </span></h4>
-                                <div className="flex items-center space-x-2">
-                                    {/* <button className="text-sm px-3 py-1.5 border rounded-md hover:bg-gray-100 flex items-center">Follow up</button>
-                                    <button className="text-sm px-3 py-1.5 border rounded-md hover:bg-gray-100 flex items-center">
-                                        + Add Notes <span className="ml-2 bg-orange-400 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">0</span>
-                                    </button> */}
-                                </div>
+                                <h4 className="font-semibold text-gray-700">
+                                    Details{' '}
+                                    <span className="text-sm text-black-500 font-normal ml-3">
+                                        {selectedStudent
+                                            ? `Student Name: ${selectedStudent.name} || FatherName: ${selectedStudent.fatherName} || Adm No: ${selectedStudent.admNo} || Phone: ${selectedStudent.fatherPhone}`
+                                            : 'Details : N/A'}
+                                    </span>
+                                </h4>
                             </div>
 
                             <div className="border rounded-lg overflow-hidden shadow-sm">
                                 <div className="bg-blue-500 text-white px-4 py-2 flex justify-between items-center">
                                     <h4 className="font-semibold relative">
                                         Installment
-                                        {installments.length > 0 && <span className="absolute -top-2 -right-5 bg-orange-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{installments.length}</span>}
+                                        {installments.length > 0 && (
+                                            <span className="absolute -top-2 -right-5 bg-orange-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                                {installments.length}
+                                            </span>
+                                        )}
                                     </h4>
-                                    <button onClick={fetchPaymentHistory} className="bg-orange-400 text-white px-3 py-1 text-sm rounded-md hover:bg-orange-500">Print / Cancel</button>
+                                    <button
+                                        onClick={fetchPaymentHistory}
+                                        className="bg-orange-400 text-white px-3 py-1 text-sm rounded-md hover:bg-orange-500"
+                                    >
+                                        Print / Cancel
+                                    </button>
                                 </div>
                                 <div className="overflow-x-auto max-h-96">
                                     <table className="w-full text-sm">
@@ -884,35 +860,36 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                                 filteredInstallments.length > 0 ? (
                                                     filteredInstallments.map((inst, index) => {
                                                         const isPaid = inst.paid;
-
-                                                        // Determine if this installment should be disabled
                                                         let isDisabled = false;
-
-                                                        if (isPaid) {
-                                                            // Already paid - can't select
-                                                            isDisabled = false;
-                                                        } else {
-                                                            // Robust Sequential Logic scoped to Filtered View:
-                                                            // You can only select this fee IF all previous fees in this view are either PAID or SELECTED.
-                                                            const allPreviousCleared = filteredInstallments.slice(0, index).every(p => p.paid || selectedIds.includes(p.sr));
-                                                            if (!allPreviousCleared) {
-                                                                isDisabled = true;
-                                                            }
+                                                        if (!isPaid) {
+                                                            const allPreviousCleared = filteredInstallments
+                                                                .slice(0, index)
+                                                                .every(p => p.paid || selectedIds.includes(p.sr));
+                                                            if (!allPreviousCleared) isDisabled = true;
                                                         }
-
-                                                        return <InstallmentRow
-                                                            key={inst.sr}
-                                                            installment={inst}
-                                                            isSelected={selectedIds.includes(inst.sr)}
-                                                            onSelect={handleSelect}
-                                                            isDisabled={isDisabled}
-                                                        />;
+                                                        return (
+                                                            <InstallmentRow
+                                                                key={inst.sr}
+                                                                installment={inst}
+                                                                isSelected={selectedIds.includes(inst.sr)}
+                                                                onSelect={handleSelect}
+                                                                isDisabled={isDisabled}
+                                                            />
+                                                        );
                                                     })
                                                 ) : (
-                                                    <tr><td colSpan={4} className="text-center p-4 text-gray-500">No installments found for this fee type.</td></tr>
+                                                    <tr>
+                                                        <td colSpan={4} className="text-center p-4 text-gray-500">
+                                                            No installments found for this fee type.
+                                                        </td>
+                                                    </tr>
                                                 )
                                             ) : (
-                                                <tr><td colSpan={4} className="text-center p-4 text-gray-500">Please select a student to view installments.</td></tr>
+                                                <tr>
+                                                    <td colSpan={4} className="text-center p-4 text-gray-500">
+                                                        Please select a student to view installments.
+                                                    </td>
+                                                </tr>
                                             )}
                                         </tbody>
                                     </table>
@@ -924,9 +901,19 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                         <div className="lg:col-span-2 space-y-4">
                             <div className="border rounded-lg p-4 space-y-3 bg-gray-50/50 shadow-sm">
                                 <div className="flex justify-between items-center">
-                                    <h3 className="font-semibold text-gray-800">Fee Structure <a href="#" className="text-blue-500 text-sm font-normal hover:underline">Get Help</a></h3>
+                                    <h3 className="font-semibold text-gray-800">
+                                        Fee Structure{' '}
+                                        <a href="#" className="text-blue-500 text-sm font-normal hover:underline">
+                                            Get Help
+                                        </a>
+                                    </h3>
                                     <div className="flex items-center">
-                                        <select value={selectedConcession} onChange={e => setSelectedConcession(e.target.value)} className="text-sm border rounded-l-md p-1.5 focus:ring-violet-500 focus:border-violet-500" disabled={!selectedStudent}>
+                                        <select
+                                            value={selectedConcession}
+                                            onChange={e => setSelectedConcession(e.target.value)}
+                                            className="text-sm border rounded-l-md p-1.5 focus:ring-violet-500 focus:border-violet-500"
+                                            disabled={!selectedStudent}
+                                        >
                                             <option value="0">Select Concession</option>
                                             {concessions
                                                 .filter(c => c.show_in_payment)
@@ -934,14 +921,24 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                                     <option key={idx} value={c.title}>{c.title}</option>
                                                 ))}
                                         </select>
-                                        <button onClick={handleApplyConcession} className="bg-green-500 text-white px-3 py-1.5 text-sm rounded-r-md hover:bg-green-600" disabled={!selectedStudent}>Apply</button>
+                                        <button
+                                            onClick={handleApplyConcession}
+                                            className="bg-green-500 text-white px-3 py-1.5 text-sm rounded-r-md hover:bg-green-600"
+                                            disabled={!selectedStudent}
+                                        >
+                                            Apply
+                                        </button>
                                     </div>
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm bg-white">
                                         <thead>
                                             <tr className="bg-gray-100">
-                                                <th className="border p-2 w-10"><button className="w-6 h-6 bg-green-500 text-white rounded hover:bg-green-600 flex items-center justify-center text-sm">+</button></th>
+                                                <th className="border p-2 w-10">
+                                                    <button className="w-6 h-6 bg-green-500 text-white rounded hover:bg-green-600 flex items-center justify-center text-sm">
+                                                        +
+                                                    </button>
+                                                </th>
                                                 <th className="border p-2 text-left font-medium text-gray-600">Title</th>
                                                 <th className="border p-2 text-right font-medium text-gray-600">Payable</th>
                                                 <th className="border p-2 text-right font-medium text-gray-600">Paid</th>
@@ -950,40 +947,68 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {selectedItems.length > 0 ? selectedItems.map(item => {
-                                                // Calculate the amount to show - use dueAmount if > 0, otherwise payable
-                                                const displayAmount = (item.dueAmount !== undefined && item.dueAmount > 0) ? item.dueAmount : item.payable;
-                                                const paidAlready = item.paidAmount || 0;
-                                                const dueRemaining = item.dueAmount || 0;
-
-                                                return (
-                                                    <tr key={item.sr}>
-                                                        <td className="border p-2"></td>
-                                                        <td className="border p-2">{item.title}</td>
-                                                        <td className="border p-2 text-right">{displayAmount.toFixed(0)}</td>
-                                                        <td className="border p-2 text-right">{paidAlready.toFixed(0)}</td>
-                                                        <td className="border p-2 text-right">{dueRemaining.toFixed(0)}</td>
-                                                        <td className="border p-2"></td>
-                                                    </tr>
-                                                );
-                                            }) : (
-                                                <tr><td className="border p-2 h-8 text-center text-gray-400" colSpan={6}>Select installments to pay</td></tr>
+                                            {selectedItems.length > 0 ? (
+                                                selectedItems.map(item => {
+                                                    const displayAmount =
+                                                        item.dueAmount !== undefined && item.dueAmount > 0
+                                                            ? item.dueAmount
+                                                            : item.payable;
+                                                    const paidAlready = item.paidAmount || 0;
+                                                    const dueRemaining = item.dueAmount || 0;
+                                                    return (
+                                                        <tr key={item.sr}>
+                                                            <td className="border p-2"></td>
+                                                            <td className="border p-2">{item.title}</td>
+                                                            <td className="border p-2 text-right">{displayAmount.toFixed(0)}</td>
+                                                            <td className="border p-2 text-right">{paidAlready.toFixed(0)}</td>
+                                                            <td className="border p-2 text-right">{dueRemaining.toFixed(0)}</td>
+                                                            <td className="border p-2"></td>
+                                                        </tr>
+                                                    );
+                                                })
+                                            ) : (
+                                                <tr>
+                                                    <td className="border p-2 h-8 text-center text-gray-400" colSpan={6}>
+                                                        Select installments to pay
+                                                    </td>
+                                                </tr>
                                             )}
                                         </tbody>
                                     </table>
                                 </div>
                                 <div className="space-y-2 pt-4">
-                                    <div className="flex justify-between items-center text-sm"><span className="text-gray-600">Amount</span><span className="font-semibold text-gray-800">{amount.toLocaleString()}</span></div>
-                                    <div className="flex justify-between items-center text-sm"><span className="text-gray-600">Concession</span><span className="font-semibold text-gray-800">{appliedConcession.toLocaleString()}</span></div>
-                                    <div className="flex justify-between items-center text-sm font-semibold border-t pt-2"><span className="text-gray-800">Payable(Amount - Concession)</span><span className="font-semibold text-gray-800">{payable.toLocaleString()}</span></div>
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-gray-600">Amount</span>
+                                        <span className="font-semibold text-gray-800">{amount.toLocaleString()}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-gray-600">Concession</span>
+                                        <span className="font-semibold text-gray-800">
+                                            {appliedConcession.toLocaleString()}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-sm font-semibold border-t pt-2">
+                                        <span className="text-gray-800">Payable(Amount - Concession)</span>
+                                        <span className="font-semibold text-gray-800">{payable.toLocaleString()}</span>
+                                    </div>
                                     <div className="flex justify-between items-center text-sm border-t pt-2">
                                         <span className="text-gray-600">Paid</span>
                                         <div className="flex items-center">
-                                            <input type="text" value={paidInput} onChange={e => setPaidInput(e.target.value)} className="w-24 px-2 py-1 border border-gray-300 rounded-md shadow-sm text-right focus:outline-none focus:ring-violet-500 focus:border-violet-500" />
-                                            <button className="ml-2 px-3 py-1 bg-green-500 text-white rounded-md text-lg font-bold hover:bg-green-600">=</button>
+                                            <input
+                                                type="text"
+                                                value={paidInput}
+                                                onChange={e => setPaidInput(e.target.value)}
+                                                className="w-24 px-2 py-1 border border-gray-300 rounded-md shadow-sm text-right focus:outline-none focus:ring-violet-500 focus:border-violet-500"
+                                            />
+                                            <button className="ml-2 px-3 py-1 bg-green-500 text-white rounded-md text-lg font-bold hover:bg-green-600">
+                                                =
+                                            </button>
                                         </div>
                                     </div>
-                                    <div className="flex justify-between items-center text-sm font-semibold text-red-600 border-t pt-2"><span >Due (Payable - Paid)</span><span>{due.toLocaleString()}</span></div>
+                                    <div className="flex justify-between items-center text-sm font-semibold text-red-600 border-t pt-2">
+                                        <span>Due (Payable - Paid)</span>
+                                        <span>{due.toLocaleString()}</span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -994,7 +1019,11 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700">Payment Mode*</label>
-                                        <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500">
+                                        <select
+                                            value={paymentMode}
+                                            onChange={e => setPaymentMode(e.target.value)}
+                                            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500"
+                                        >
                                             <option>Cash</option>
                                             <option>CardSwap</option>
                                             <option>Online</option>
@@ -1004,22 +1033,42 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700">Payment Date*</label>
-                                        <input type="date" value={paymentDate} disabled={true} onChange={e => setPaymentDate(e.target.value)} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500" />
+                                        <input
+                                            type="date"
+                                            value={paymentDate}
+                                            disabled={true}
+                                            onChange={e => setPaymentDate(e.target.value)}
+                                            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500"
+                                        />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">School Receipt No</label>
-                                        <input type="text" value={schoolReceiptNo} onChange={e => setSchoolReceiptNo(e.target.value)} disabled={true} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500" />
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            School Receipt No
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={schoolReceiptNo}
+                                            onChange={e => setSchoolReceiptNo(e.target.value)}
+                                            disabled={true}
+                                            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500"
+                                        />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700">Payment Note</label>
-                                        <input type="text" value={paymentNote} maxLength={25} onChange={e => setPaymentNote(e.target.value)} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500" />
+                                        <input
+                                            type="text"
+                                            value={paymentNote}
+                                            maxLength={25}
+                                            onChange={e => setPaymentNote(e.target.value)}
+                                            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500"
+                                        />
                                     </div>
-
-                                    {/* Conditionally render UPI/Card fields */}
                                     {(paymentMode === 'CardSwap' || paymentMode === 'UPI') && (
                                         <>
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700">UPI/Card Transaction ID*</label>
+                                                <label className="block text-sm font-medium text-gray-700">
+                                                    UPI/Card Transaction ID*
+                                                </label>
                                                 <input
                                                     type="text"
                                                     value={transactionId}
@@ -1029,7 +1078,9 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700">UPI/Card Description*</label>
+                                                <label className="block text-sm font-medium text-gray-700">
+                                                    UPI/Card Description*
+                                                </label>
                                                 <input
                                                     type="text"
                                                     value={transactionIdDescription}
@@ -1043,24 +1094,47 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                     )}
                                 </div>
                                 <div className="flex items-center">
-                                    <input id="keep-details" type="checkbox" className="h-4 w-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500" />
-                                    <label htmlFor="keep-details" className="ml-2 block text-sm text-gray-900">Keep same payment detail for the next fee payment</label>
+                                    <input
+                                        id="keep-details"
+                                        type="checkbox"
+                                        className="h-4 w-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500"
+                                    />
+                                    <label htmlFor="keep-details" className="ml-2 block text-sm text-gray-900">
+                                        Keep same payment detail for the next fee payment
+                                    </label>
                                 </div>
                                 <div className="flex justify-end space-x-2 pt-2">
-                                    <button onClick={handleTakeFee} className="px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-md hover:bg-violet-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500" disabled={!selectedStudent}>Take Fee</button>
-                                    <button onClick={handleReset} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400">Reset</button>
+                                    <button
+                                        onClick={handleTakeFee}
+                                        className="px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-md hover:bg-violet-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500"
+                                        disabled={!selectedStudent}
+                                    >
+                                        Take Fee
+                                    </button>
+                                    <button
+                                        onClick={handleReset}
+                                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
+                                    >
+                                        Reset
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-            {showReceipt && receiptData && <FeeReceipt onClose={handleCloseReceipt} receiptData={receiptData} />}
+
+            {showReceipt && receiptData && (
+                <FeeReceipt onClose={handleCloseReceipt} receiptData={receiptData} />
+            )}
+
             {showHistory && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
                     <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6">
                         <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-bold">Payment History - {selectedStudent?.name} ({localStorage.getItem('academicYear')})</h2>
+                            <h2 className="text-xl font-bold">
+                                Payment History - {selectedStudent?.name} ({localStorage.getItem('academicYear')})
+                            </h2>
                             <div className="flex items-center space-x-4">
                                 <label className="flex items-center space-x-2 text-sm">
                                     <input
@@ -1071,9 +1145,35 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                     />
                                     <span>Show Cancelled</span>
                                 </label>
-                                <button onClick={() => setShowHistory(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+                                <button
+                                    onClick={() => setShowHistory(false)}
+                                    className="text-gray-500 hover:text-gray-700"
+                                >
+                                    ✕
+                                </button>
                             </div>
                         </div>
+
+                        {/* ── Admin-only notice banner ─────────────────────────────── */}
+                        {!isAdmin && (
+                            <div className="mb-3 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-4 w-4 shrink-0"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                >
+                                    <path
+                                        fillRule="evenodd"
+                                        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                        clipRule="evenodd"
+                                    />
+                                </svg>
+                                Receipt cancellation is restricted to <strong className="mx-1">Administrators</strong> only.
+                            </div>
+                        )}
+                        {/* ────────────────────────────────────────────────────────── */}
+
                         <table className="w-full text-sm text-left">
                             <thead className="bg-gray-100">
                                 <tr>
@@ -1089,31 +1189,39 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {Object.values(paymentHistory.reduce((acc: any, curr) => {
-                                    // Group by Receipt No
-                                    if (!acc[curr.receipt_no]) acc[curr.receipt_no] = [];
-                                    acc[curr.receipt_no].push(curr);
-                                    return acc;
-                                }, {})).map((group: any) => {
+                                {Object.values(
+                                    paymentHistory.reduce((acc: any, curr) => {
+                                        if (!acc[curr.receipt_no]) acc[curr.receipt_no] = [];
+                                        acc[curr.receipt_no].push(curr);
+                                        return acc;
+                                    }, {})
+                                ).map((group: any) => {
                                     const first = group[0];
 
-                                    // Enrich group with SR to enable sorting/grouping
                                     const enrichedGroup = group.map((p: any) => {
-                                        // Backend might store "March" while frontend title is "March Fee"
-                                        const match = installments.find(i => i.title === p.installment || i.title === `${p.installment} Fee`);
+                                        const match = installments.find(
+                                            i => i.title === p.installment || i.title === `${p.installment} Fee`
+                                        );
                                         return { ...p, sr: match ? match.sr : 0 };
                                     });
 
                                     const groupedDetails = groupInstallments(enrichedGroup);
-
-                                    // Summarize Group for Table Display
-                                    const totalAmount = group.reduce((sum: number, p: any) => sum + parseFloat(p.amount_paid), 0);
-                                    const totalConcession = group.reduce((sum: number, p: any) => sum + parseFloat(p.concession_amount), 0);
+                                    const totalAmount = group.reduce(
+                                        (sum: number, p: any) => sum + parseFloat(p.amount_paid),
+                                        0
+                                    );
+                                    const totalConcession = group.reduce(
+                                        (sum: number, p: any) => sum + parseFloat(p.concession_amount),
+                                        0
+                                    );
 
                                     const isCancelled = first.status === 'I';
 
                                     return (
-                                        <tr key={first.receipt_no} className={`border-b hover:bg-gray-50 align-top ${isCancelled ? 'bg-red-50' : ''}`}>
+                                        <tr
+                                            key={first.receipt_no}
+                                            className={`border-b hover:bg-gray-50 align-top ${isCancelled ? 'bg-red-50' : ''}`}
+                                        >
                                             <td className="p-2">{first.receipt_no}</td>
                                             <td className="p-2">{first.academic_year}</td>
                                             <td className="p-2">{first.payment_date}</td>
@@ -1125,36 +1233,78 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                                 </div>
                                             </td>
                                             <td className="p-2 text-right">₹{totalAmount.toLocaleString('en-IN')}</td>
-                                            <td className="p-2 text-right">₹{totalConcession.toLocaleString('en-IN')}</td>
+                                            <td className="p-2 text-right">
+                                                ₹{totalConcession.toLocaleString('en-IN')}
+                                            </td>
                                             <td className="p-2">{first.mode}</td>
                                             <td className="p-2">
                                                 {isCancelled ? (
                                                     <div className="text-red-600 font-semibold text-xs">
                                                         Cancelled
-                                                        {first.cancel_reason && <div className="text-gray-500 font-normal italic">{first.cancel_reason}</div>}
+                                                        {first.cancel_reason && (
+                                                            <div className="text-gray-500 font-normal italic">
+                                                                {first.cancel_reason}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ) : (
                                                     <span className="text-green-600 font-semibold text-xs">Active</span>
                                                 )}
                                             </td>
-                                            <td className="p-2 flex justify-center space-x-2">
-                                                <button onClick={() => handlePrintHistoryReceipt(first.receipt_no)} title="Print Receipt" className="text-blue-600 hover:text-blue-800">
-                                                    <PrinterIcon className="w-5 h-5" />
-                                                </button>
-                                                {!isCancelled && (
-                                                    <button onClick={() => handleDeleteReceipt(first.receipt_no)} title="Cancel Receipt" className="text-red-600 hover:text-red-800">
-                                                        <TrashIcon className="w-5 h-5" />
+                                            <td className="p-2">
+                                                <div className="flex justify-center space-x-2">
+                                                    {/* Print – visible to everyone */}
+                                                    <button
+                                                        onClick={() => handlePrintHistoryReceipt(first.receipt_no)}
+                                                        title="Print Receipt"
+                                                        className="text-blue-600 hover:text-blue-800"
+                                                    >
+                                                        <PrinterIcon className="w-5 h-5" />
                                                     </button>
-                                                )}
+
+                                                    {/* ── Cancel – ADMIN ONLY ─────────────────────────── */}
+                                                    {!isCancelled && (
+                                                        isAdmin ? (
+                                                            // Admin: active red trash button
+                                                            <button
+                                                                onClick={() => handleDeleteReceipt(first.receipt_no)}
+                                                                title="Cancel Receipt"
+                                                                className="text-red-600 hover:text-red-800"
+                                                            >
+                                                                <TrashIcon className="w-5 h-5" />
+                                                            </button>
+                                                        ) : (
+                                                            // Non-admin: greyed-out, non-interactive icon with tooltip
+                                                            <span
+                                                                title="Only administrators can cancel receipts"
+                                                                className="text-gray-300 cursor-not-allowed"
+                                                            >
+                                                                <TrashIcon className="w-5 h-5" />
+                                                            </span>
+                                                        )
+                                                    )}
+                                                    {/* ────────────────────────────────────────────────── */}
+                                                </div>
                                             </td>
                                         </tr>
                                     );
                                 })}
-                                {paymentHistory.length === 0 && <tr><td colSpan={9} className="p-4 text-center text-gray-500">No payments found.</td></tr>}
+                                {paymentHistory.length === 0 && (
+                                    <tr>
+                                        <td colSpan={9} className="p-4 text-center text-gray-500">
+                                            No payments found.
+                                        </td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                         <div className="mt-4 flex justify-end">
-                            <button onClick={() => setShowHistory(false)} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Close</button>
+                            <button
+                                onClick={() => setShowHistory(false)}
+                                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+                            >
+                                Close
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1162,4 +1312,5 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
         </div>
     );
 };
+
 export default TakeFee;
