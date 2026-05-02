@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from extensions import db
+from extensions import db, to_local_time
 from models import FeeType, ClassFeeStructure, StudentFee, FeeInstallment, Concession, Branch, OrgMaster, Student
 from helpers import fee_type_to_dict
 from helpers import token_required, require_academic_year, generate_installments, shift_installments, assign_fee_to_student, normalize_fee_title, get_default_location
@@ -206,8 +206,8 @@ def get_class_fee_structure(current_user):
         "installments_count": fs.installments_count,
         "is_new_admission": fs.isnewadmission,
         "fee_group": fs.feegroup,
-        "created_at": fs.created_at.isoformat() if fs.created_at else None,
-        "updated_at": fs.updated_at.isoformat() if fs.updated_at else None,
+        "created_at": to_local_time(fs.created_at).isoformat() if fs.created_at else None,
+        "updated_at": to_local_time(fs.updated_at).isoformat() if fs.updated_at else None,
         "created_by": fs.created_by,
         "updated_by": fs.updated_by,
         "installments": generate_installments(fs)
@@ -613,8 +613,8 @@ def get_installments(current_user):
                 "fee_type_name": i.fee_type.feetype if i.fee_type else None,
                 "branch": i.branch,
                 "academic_year": i.academic_year,
-                "created_at": i.created_at.isoformat() if i.created_at else None,
-                "updated_at": i.updated_at.isoformat() if i.updated_at else None,
+                "created_at": to_local_time(i.created_at).isoformat() if i.created_at else None,
+                "updated_at": to_local_time(i.updated_at).isoformat() if i.updated_at else None,
                 "created_by": i.created_by,
                 "updated_by": i.updated_by
             } for i in installments]

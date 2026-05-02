@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file, current_app
-from extensions import db
+from extensions import db, get_now, to_local_time
 from models import DocumentType, StudentDocument, Student, User, Branch, UserBranchAccess
 from helpers import token_required
 from datetime import datetime
@@ -72,8 +72,8 @@ def get_document_types(current_user):
                 "name": t.name,
                 "description": t.description,
                 "is_active": t.is_active,
-                "created_at": t.created_at.isoformat() if t.created_at else None,
-                "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+                "created_at": to_local_time(t.created_at).isoformat() if t.created_at else None,
+                "updated_at": to_local_time(t.updated_at).isoformat() if t.updated_at else None,
                 "created_by": t.created_by,
                 "updated_by": t.updated_by
             } for t in types
@@ -194,7 +194,7 @@ def upload_student_document(current_user):
 
         # Unique filename: DOCTYPECODE_YYYYMMDDHHMMSS_xxxxxx.ext
         original_ext   = file.filename.rsplit('.', 1)[1].lower()
-        timestamp      = datetime.now().strftime('%Y%m%d%H%M%S')
+        timestamp      = get_now().strftime('%Y%m%d%H%M%S')
         unique_id      = str(uuid.uuid4().hex)[:6]
         secure_code    = secure_filename(doc_type.code)
         new_filename   = f"{secure_code}_{timestamp}_{unique_id}.{original_ext}"
@@ -287,7 +287,7 @@ def get_student_documents(current_user, student_id):
                 'issue_date': doc.issue_date.strftime('%Y-%m-%d') if doc.issue_date else None,
                 'notes': doc.notes,
                 'file_name': doc.file_name,
-                'uploaded_at': doc.created_at.strftime('%Y-%m-%d %H:%M:%S') if doc.created_at else None,
+                'uploaded_at': to_local_time(doc.created_at).strftime('%Y-%m-%d %H:%M:%S') if doc.created_at else None,
                 'is_verified': doc.is_verified,
                 'upload_by_name': user_map.get(doc.created_by, 'System')
             })
@@ -296,10 +296,6 @@ def get_student_documents(current_user, student_id):
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
-
-# ==========================================
-# STUDENT DOCUMENTS — DOWNLOAD
-# ==========================================
 
 @document_routes.route('/download/<int:doc_id>', methods=['GET'])
 @token_required

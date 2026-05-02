@@ -151,7 +151,8 @@ const filterData = (data: any[], filters: any) => {
 const calculateSummary = (receipts: any[]) => {
     const total = receipts.reduce((sum, r) => sum + Number(r.amount_paid || r.amount || 0), 0);
     const modeMap: Record<string, number> = {};
-    const userMap: Record<string, { count: number, amount: number, branch: string }> = {};
+    // Key will be "user|branch" to ensure accurate multi-branch reporting
+    const userMap: Record<string, { user: string, count: number, amount: number, branch: string }> = {};
 
     receipts.forEach(r => {
         const amt = Number(r.amount_paid || r.amount || 0);
@@ -159,12 +160,17 @@ const calculateSummary = (receipts: any[]) => {
         modeMap[m] = (modeMap[m] || 0) + amt;
 
         const u = r.collected_by || 'Unknown';
-        if (!userMap[u]) userMap[u] = { count: 0, amount: 0, branch: r.branch || '-' };
-        userMap[u].count += 1;
-        userMap[u].amount += amt;
+        const b = r.branch || '-';
+        const key = `${u}|${b}`;
+
+        if (!userMap[key]) {
+            userMap[key] = { user: u, count: 0, amount: 0, branch: b };
+        }
+        userMap[key].count += 1;
+        userMap[key].amount += amt;
     });
 
-    const collectedBySummary = Object.entries(userMap).map(([user, data]) => ({ user, ...data }));
+    const collectedBySummary = Object.values(userMap);
     return { total, modeMap, collectedBySummary };
 };
 

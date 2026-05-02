@@ -1,5 +1,5 @@
-from extensions import db
 from datetime import datetime, date
+from extensions import db, get_now
 from decimal import Decimal
 from sqlalchemy import or_, event
 from sqlalchemy.orm import declared_attr
@@ -39,8 +39,8 @@ class AuditMixin(object):
     Mixin to add created_at, updated_at, created_by, updated_by to all tables.
     """
     __audit_module__ = "GENERAL"
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=get_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=get_now, onupdate=get_now, nullable=False)
 
     @declared_attr
     def created_by(cls):
@@ -867,7 +867,7 @@ def receive_before_flush(session, flush_context, instances):
                 if obj.created_by is None:
                     obj.created_by = user_id
                 obj.updated_by = user_id
-            now = datetime.utcnow()
+            now = get_now()
             if obj.created_at is None:
                 obj.created_at = now
             obj.updated_at = now
@@ -879,7 +879,7 @@ def receive_before_flush(session, flush_context, instances):
         if isinstance(obj, AuditMixin) and not isinstance(obj, AuditLog):
             if user_id is not None:
                 obj.updated_by = user_id
-            obj.updated_at = datetime.utcnow()
+            obj.updated_at = get_now()
 
     # =========================================================
     # INSERT
@@ -914,7 +914,7 @@ def receive_before_flush(session, flush_context, instances):
             new_data=new_data,
             user_id=user_id,
             ip_address=ip_address,
-            timestamp=datetime.utcnow()
+            timestamp=get_now()
         )
 
         session.add(log)
@@ -969,7 +969,7 @@ def receive_before_flush(session, flush_context, instances):
                 new_data=new_data,
                 user_id=user_id,
                 ip_address=ip_address,
-                timestamp=datetime.utcnow()
+                timestamp=get_now()
             )
 
             session.add(log)
@@ -1006,7 +1006,7 @@ def receive_before_flush(session, flush_context, instances):
             new_data=None,
             user_id=user_id,
             ip_address=ip_address,
-            timestamp=datetime.utcnow()
+            timestamp=get_now()
         )
 
         session.add(log)

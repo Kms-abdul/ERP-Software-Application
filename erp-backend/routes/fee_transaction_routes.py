@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from extensions import db
+from extensions import db, get_now, get_today
 from models import Student, StudentFee, FeePayment, Branch, FeeInstallment, Concession, ClassFeeStructure, StudentAcademicRecord, FeeType
 from helpers import token_required, require_academic_year, normalize_fee_title, assign_fee_to_student, require_editable_student, ensure_student_editable
 from services.sequence_service import SequenceService
@@ -286,7 +286,7 @@ def record_fee_payment(current_user):
     payment_amount = data.get("amount_paid") or data.get("amount")
     
     payment_mode = data.get("payment_mode", "Cash")
-    payment_date_str = data.get("payment_date", datetime.now().strftime("%Y-%m-%d"))
+    payment_date_str = data.get("payment_date", get_today().strftime("%Y-%m-%d"))
     transaction_id = data.get("transaction_id")
     transaction_id_description = data.get("transaction_id_description")
 
@@ -734,8 +734,7 @@ def delete_student_fee(current_user, fee_id):
         if sf.paid_amount and sf.paid_amount > 0:
             return jsonify({"error": "Cannot delete fee that has payments collected. Please delete payments first."}), 400
             
-        sf.is_active = False
-        sf.deleted_at = datetime.now()
+        sf.deleted_at = get_now()
         sf.deleted_by = current_user.user_id
 
         db.session.commit()

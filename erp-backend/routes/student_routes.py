@@ -1,6 +1,6 @@
 
 from flask import Blueprint, jsonify, request, send_file
-from extensions import db
+from extensions import db, get_now, to_local_time
 from models import Student, Branch, UserBranchAccess, StudentFee, StudentAcademicRecord
 from models import (
     Student,
@@ -745,7 +745,7 @@ def delete_student(current_user, student_id):
              return jsonify({"error": "student has fee to pay unable to deactivate"}), 400
 
         student.status = "Inactive"
-        student.inactivated_date = datetime.now()
+        student.inactivated_date = get_now()
         student.inactivate_reason = "Deleted via API"
         student.inactivated_by = current_user.user_id
         db.session.commit()
@@ -978,7 +978,7 @@ def get_student_history(current_user, student_id):
             "is_promoted": r.is_promoted,
             "is_locked": r.is_locked,
             "promoted_date": r.promoted_date.isoformat() if r.promoted_date else None,
-            "created_at": r.created_at.isoformat() if r.created_at else None
+            "created_at": to_local_time(r.created_at).isoformat() if r.created_at else None
         } for r in records]
         
         return jsonify({"history": history}), 200
@@ -1053,14 +1053,14 @@ def promote_students_bulk(current_user):
                     # RE-PROMOTION CASE: Reactivate the existing record
                     if current_record:
                         current_record.is_promoted = True
-                        current_record.promoted_date = datetime.now()
+                        current_record.promoted_date = get_now()
                         current_record.is_locked = True
-                        current_record.locked_at = datetime.now(timezone.utc)
+                        current_record.locked_at = get_now()
 
                     existing_target_record.is_promoted = False
                     existing_target_record.is_locked = False
                     existing_target_record.locked_at = None
-                    existing_target_record.promoted_date = datetime.now()
+                    existing_target_record.promoted_date = get_now()
                     existing_target_record.class_name = new_class
                     existing_target_record.section = final_section
                     existing_target_record.roll_number = new_roll_no
@@ -1079,9 +1079,9 @@ def promote_students_bulk(current_user):
 
                 if current_record:
                     current_record.is_promoted = True
-                    current_record.promoted_date = datetime.now()
+                    current_record.promoted_date = get_now()
                     current_record.is_locked = True
-                    current_record.locked_at = datetime.now(timezone.utc)
+                    current_record.locked_at = get_now()
 
                 new_record = StudentAcademicRecord(
                     student_id=student_id,

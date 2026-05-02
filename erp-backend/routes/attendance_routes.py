@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from extensions import db
+from extensions import db, get_today, get_now, to_local_time
 from models import Student, Attendance, Branch, UserBranchAccess, StudentAcademicRecord
 from helpers import token_required, require_academic_year, student_to_dict, get_default_location, ensure_student_editable
 from datetime import datetime, date
@@ -137,7 +137,7 @@ def get_attendance(current_user):
         
         if date_str and 'records' in locals() and records:
              class_update_count = max((r.update_count for r in records if r.update_count is not None), default=0)
-             last_mod_dt = max((r.updated_at for r in records if r.updated_at is not None), default=None)
+             last_mod_dt = max((to_local_time(r.updated_at) for r in records if r.updated_at is not None), default=None)
              last_modified = last_mod_dt.isoformat() if last_mod_dt else None
 
         return jsonify({
@@ -205,8 +205,9 @@ def save_attendance(current_user):
             try:
                 d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
                 
-                # Check for future month
-                today = date.today()
+                # Default dates for statistics
+                now = get_now()
+                today = now.date()
                 if (d_obj.year > today.year) or (d_obj.year == today.year and d_obj.month > today.month):
                     skipped_count += 1
                     skip_details.append(f"Future month blocked: {d_str}")
@@ -293,7 +294,7 @@ def save_attendance(current_user):
                 if record.status != status:
                     record.status = status
                     record.update_count = (record.update_count or 0) + 1
-                    record.updated_at = datetime.now()
+                    record.updated_at = get_now()
                     updated_count += 1
             else:
                 # Insert
@@ -302,7 +303,7 @@ def save_attendance(current_user):
                     date=item["date"],
                     status=status,
                     update_count=0,
-                    updated_at=datetime.now(),
+                    updated_at=get_now(),
                     branch=record_branch,
                     academic_year=h_year,
                     location=current_user.location if current_user.location else get_default_location()

@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from extensions import db
+from extensions import db, to_local_time
 from models import SubjectMaster, Branch, OrgMaster, ClassSubjectAssignment
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import exists
@@ -90,8 +90,8 @@ def list_subjects():
                 "subject_type": s.subject_type,
                 "academic_year": s.academic_year,
                 "is_active": s.is_active,
-                "created_at": s.created_at.isoformat() if s.created_at else None,
-                "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+                "created_at": to_local_time(s.created_at).isoformat() if s.created_at else None,
+                "updated_at": to_local_time(s.updated_at).isoformat() if s.updated_at else None,
                 "created_by": s.created_by,
                 "updated_by": s.updated_by
             }
@@ -286,8 +286,8 @@ def get_assigned_subjects():
                 "subject_name": subject.subject_name,
                 "subject_type": subject.subject_type,
                 "branch_name": assign.branch_name,
-                "created_at": assign.created_at.isoformat() if assign.created_at else None,
-                "updated_at": assign.updated_at.isoformat() if assign.updated_at else None,
+                "created_at": to_local_time(assign.created_at).isoformat() if assign.created_at else None,
+                "updated_at": to_local_time(assign.updated_at).isoformat() if assign.updated_at else None,
                 "created_by": assign.created_by,
                 "updated_by": assign.updated_by
             })

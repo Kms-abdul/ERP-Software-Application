@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from extensions import db
+from extensions import db, get_today, get_now, to_local_time
 from models import WeeklyOffRule, HolidayCalendar, Branch, ClassMaster
 from helpers import token_required, require_academic_year, get_default_location
 from datetime import datetime, date
@@ -35,8 +35,8 @@ def weekoff_to_dict(rule):
         "title": title,
         "academic_year": rule.academic_year,
         "active": rule.active,
-        "created_at": rule.created_at.isoformat() if rule.created_at else None,
-        "updated_at": rule.updated_at.isoformat() if rule.updated_at else None,
+        "created_at": to_local_time(rule.created_at).isoformat() if rule.created_at else None,
+        "updated_at": to_local_time(rule.updated_at).isoformat() if rule.updated_at else None,
         "created_by": rule.created_by,
         "updated_by": rule.updated_by
     }
@@ -59,8 +59,8 @@ def holiday_to_dict(h):
         "display_order": h.display_order,
         "academic_year": h.academic_year,
         "active": h.active,
-        "created_at": h.created_at.isoformat() if h.created_at else None,
-        "updated_at": h.updated_at.isoformat() if h.updated_at else None,
+        "created_at": to_local_time(h.created_at).isoformat() if h.created_at else None,
+        "updated_at": to_local_time(h.updated_at).isoformat() if h.updated_at else None,
         "created_by": h.created_by,
         "updated_by": h.updated_by
     }
@@ -139,7 +139,7 @@ def create_weekoff(current_user):
             week_number=week_number,
             academic_year=h_year,
             active=True,
-            created_at=datetime.now()
+            created_at=get_now()
         )
         db.session.add(rule)
         db.session.commit()
@@ -230,7 +230,7 @@ def create_holiday(current_user):
             display_order=data.get("display_order"),
             academic_year=h_year,
             active=True,
-            created_at=datetime.now()
+            created_at=get_now()
         )
         db.session.add(holiday)
         db.session.commit()

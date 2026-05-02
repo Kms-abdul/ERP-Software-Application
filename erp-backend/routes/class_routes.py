@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from extensions import db
+from extensions import db, to_local_time
 from models import ClassMaster, ClassSection, Branch, Student, OrgMaster, User
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
@@ -352,8 +352,8 @@ def get_classes():
         {
             "id": c.id,
             "class_name": c.class_name,
-            "created_at": c.created_at.isoformat() if c.created_at else None,
-            "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+            "created_at": to_local_time(c.created_at).isoformat() if c.created_at else None,
+            "updated_at": to_local_time(c.updated_at).isoformat() if c.updated_at else None,
             "created_by": c.created_by,
             "updated_by": c.updated_by
         } for c in classes

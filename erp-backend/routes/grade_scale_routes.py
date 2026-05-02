@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from extensions import db
+from extensions import db, to_local_time
 from models import GradeScale, GradeScaleDetails
 from sqlalchemy.exc import IntegrityError
 from helpers import token_required
@@ -160,8 +160,8 @@ def get_grade_scales():
                 "branch": s.branch,
                 "location": s.location,
                 "total_marks": s.total_marks,
-                "created_at": s.created_at.isoformat() if s.created_at else None,
-                "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+                "created_at": to_local_time(s.created_at).isoformat() if s.created_at else None,
+                "updated_at": to_local_time(s.updated_at).isoformat() if s.updated_at else None,
                 "created_by": s.created_by,
                 "updated_by": s.updated_by
             })

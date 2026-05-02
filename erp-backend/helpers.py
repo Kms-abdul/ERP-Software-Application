@@ -2,7 +2,7 @@ from flask import request, jsonify, current_app
 import jwt
 from functools import wraps
 import traceback
-from extensions import db
+from extensions import db, get_now, get_today
 from datetime import datetime, date
 import os
 import hmac

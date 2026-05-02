@@ -1,25 +1,9 @@
 from flask import Blueprint, request, jsonify, current_app
-from extensions import db
+from extensions import db, to_local_time
 from models import TestType, User
-import jwt
+from helpers import token_required
 
-test_type_bp = Blueprint('test_type_bp', __name__) 
-
-def get_current_user():
-    token = None
-    if 'Authorization' in request.headers:
-        auth_header = request.headers['Authorization']
-        if auth_header and auth_header.startswith("Bearer "): 
-            token = auth_header.split(" ")[1]
-    
-    if not token:
-        return None
-    
-    try:
-        data = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=["HS256"])
-        return User.query.filter_by(user_id=data['user_id']).first()
-    except:
-        return None
+test_type_bp = Blueprint('test_type_bp', __name__)
 
 from sqlalchemy import or_
 
@@ -42,8 +26,8 @@ def get_test_types():
             'display_order': t.display_order,
             'is_active': t.is_active,
             'academic_year': t.academic_year,
-            'created_at': t.created_at.isoformat() if t.created_at else None,
-            'updated_at': t.updated_at.isoformat() if t.updated_at else None,
+            'created_at': to_local_time(t.created_at).isoformat() if t.created_at else None,
+            'updated_at': to_local_time(t.updated_at).isoformat() if t.updated_at else None,
             'created_by': t.created_by,
             'updated_by': t.updated_by
         } for t in test_types]), 200
@@ -51,7 +35,8 @@ def get_test_types():
         return jsonify({'error': str(e)}), 500
 
 @test_type_bp.route('/', methods=['POST'])
-def create_test_type():
+@token_required
+def create_test_type(current_user):
     try:
         data = request.json
         req_fields = ['test_name', 'max_marks', 'academic_year']
@@ -60,7 +45,6 @@ def create_test_type():
                 return jsonify({'error': f'{f} is required'}), 400
 
         academic_year = data['academic_year']
-        user = get_current_user()
 
         # Check if duplicate name in context
         if TestType.query.filter_by(test_name=data['test_name'], academic_year=academic_year).first():
@@ -80,9 +64,7 @@ def create_test_type():
             max_marks=data['max_marks'],
             display_order=target_order,
             academic_year=academic_year,
-            is_active=True,
-            created_by=user.user_id if user else None,
-            updated_by=user.user_id if user else None
+            is_active=True
         )
         
         db.session.add(new_test)
@@ -94,7 +76,8 @@ def create_test_type():
         return jsonify({'error': str(e)}), 500
 
 @test_type_bp.route('/<int:id>', methods=['PUT'])
-def update_test_type(id):
+@token_required
+def update_test_type(current_user, id):
     try:
         test_type = TestType.query.get_or_404(id)
         data = request.json
@@ -110,9 +93,7 @@ def update_test_type(id):
             except:
                 pass # Or handle error
         
-        user = get_current_user()
-        if user:
-            test_type.updated_by = user.user_id
+
 
         db.session.commit()
         return jsonify({'message': 'Test Type updated successfully'}), 200
@@ -123,14 +104,13 @@ def update_test_type(id):
 
 
 @test_type_bp.route('/<int:id>/status', methods=['PATCH'])
-def toggle_status(id):
+@token_required
+def toggle_status(current_user, id):
     try:
         test_type = TestType.query.get_or_404(id)
         test_type.is_active = not test_type.is_active
         
-        user = get_current_user()
-        if user:
-            test_type.updated_by = user.user_id
+
 
         db.session.commit()
         return jsonify({'message': 'Status updated', 'is_active': test_type.is_active}), 200
