@@ -734,10 +734,11 @@ def delete_student_fee(current_user, fee_id):
         if sf.paid_amount and sf.paid_amount > 0:
             return jsonify({"error": "Cannot delete fee that has payments collected. Please delete payments first."}), 400
             
+        sf.is_active = False
         sf.deleted_at = get_now()
         sf.deleted_by = current_user.user_id
 
-        db.session.commit()
+        db.session.commit()        
         return jsonify({"message": "Fee deleted successfully"}), 200
         
     except Exception as e:
