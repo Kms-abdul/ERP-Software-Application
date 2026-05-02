@@ -46,7 +46,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-100">
+    <div className="flex h-screen overflow-hidden bg-white">
       <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} navigateTo={navigateTo} currentPage={currentPage} />
       <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
         <Header

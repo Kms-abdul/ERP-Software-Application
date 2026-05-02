@@ -88,28 +88,15 @@ const CATEGORIES: Category[] = [
     }
 ];
 
-// Fields that should NEVER be sent to the update API
 const READ_ONLY_FIELDS = [
-    'class',
-    'admission_date',
-    'AdmissionClass',
-    'admission_no',
-    'admNo',
-    'Doa',
-    'section',
-    'academic_year',
-    'student_id',
-    'id',
-    'name',
-    'photo',
-    'admNo',
-    'rollNo',
-    'is_promoted',
-    'is_locked',
+    'class', 'admission_date', 'AdmissionClass', 'admission_no',
+    'admNo', 'Doa', 'section', 'academic_year', 'student_id',
+    'id', 'name', 'photo', 'rollNo', 'is_promoted', 'is_locked',
 ];
 
-// Fields that are read-only in the TABLE display (shown as text, not input)
 const DISPLAY_READONLY_FIELDS = ['admission_date', 'AdmissionClass'];
+
+const STUDENTS_PER_PAGE = 10;
 
 const UpdateStudentDetails: React.FC<UpdateStudentDetailsProps> = ({ onBack }) => {
     const [selectedCategory, setSelectedCategory] = useState<string>(CATEGORIES[0].id);
@@ -124,13 +111,10 @@ const UpdateStudentDetails: React.FC<UpdateStudentDetailsProps> = ({ onBack }) =
     const [savingIds, setSavingIds] = useState<Set<number>>(new Set());
     const [saveErrors, setSaveErrors] = useState<Record<number, string>>({});
     const [saveSuccess, setSaveSuccess] = useState<Set<number>>(new Set());
-
     const [currentPage, setCurrentPage] = useState(1);
-    const studentsPerPage = 50;
 
     const successTimeoutsRef = React.useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
-    // Cleanup timeouts on unmount
     useEffect(() => {
         return () => {
             Object.values(successTimeoutsRef.current).forEach(clearTimeout);
@@ -155,7 +139,6 @@ const UpdateStudentDetails: React.FC<UpdateStudentDetailsProps> = ({ onBack }) =
         }
         const branch = localStorage.getItem('currentBranch') || 'All';
         const academicYear = localStorage.getItem('academicYear') || '';
-
         api.get('/sections', {
             params: { class: selectedClass, branch, academic_year: academicYear }
         })
@@ -165,7 +148,6 @@ const UpdateStudentDetails: React.FC<UpdateStudentDetailsProps> = ({ onBack }) =
 
     const loadStudents = useCallback(() => {
         if (!selectedClass || !selectedSection) return;
-
         setLoading(true);
         setModifiedStudents({});
         setSaveErrors({});
@@ -192,16 +174,13 @@ const UpdateStudentDetails: React.FC<UpdateStudentDetailsProps> = ({ onBack }) =
         loadStudents();
     }, [selectedClass, selectedSection, loadStudents]);
 
-    // Reset page when category or search changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [selectedCategory, searchTerm]);
+    }, [selectedCategory, searchTerm, selectedClass, selectedSection]);
 
     const handleFieldChange = (studentId: number, field: string, value: any) => {
-        // Don't allow modification of read-only fields
         if (READ_ONLY_FIELDS.includes(field)) return;
 
-        // Clear any previous save error/success for this student
         setSaveErrors(prev => {
             const next = { ...prev };
             delete next[studentId];
@@ -226,7 +205,6 @@ const UpdateStudentDetails: React.FC<UpdateStudentDetailsProps> = ({ onBack }) =
         const changes = modifiedStudents[studentId];
         if (!changes || Object.keys(changes).length === 0) return;
 
-        // Filter out any read-only fields that might have sneaked in
         const cleanChanges: Record<string, any> = {};
         for (const [key, value] of Object.entries(changes)) {
             if (!READ_ONLY_FIELDS.includes(key)) {
@@ -234,10 +212,7 @@ const UpdateStudentDetails: React.FC<UpdateStudentDetailsProps> = ({ onBack }) =
             }
         }
 
-        if (Object.keys(cleanChanges).length === 0) {
-            console.warn('No valid fields to update after filtering read-only fields');
-            return;
-        }
+        if (Object.keys(cleanChanges).length === 0) return;
 
         setSavingIds(prev => new Set(prev).add(studentId));
         setSaveErrors(prev => {
@@ -248,46 +223,32 @@ const UpdateStudentDetails: React.FC<UpdateStudentDetailsProps> = ({ onBack }) =
 
         try {
             const academicYear = localStorage.getItem('academicYear') || '';
-
-            console.log('Sending update for student:', studentId, 'Fields:', cleanChanges);
-
-            // IMPORTANT: Only send the changed fields + academic_year for context
-            // Do NOT send class/section unless they are actually being changed
-            // This prevents triggering the academic record update block unintentionally
             const payload: Record<string, any> = {
                 ...cleanChanges,
                 academic_year: academicYear,
             };
 
-            // Only include class/section if Roll_Number is being changed
-            // (backend needs class+section for roll number uniqueness check)
             if (cleanChanges.Roll_Number !== undefined) {
                 payload.class = selectedClass;
                 payload.section = selectedSection;
             }
 
-            const response = await api.put(`/students/${studentId}`, payload);
+            await api.put(`/students/${studentId}`, payload);
 
-            console.log('Update response:', response.data);
-
-            // Update local student state
             setStudents(prev => prev.map(s => {
                 const sid = s.student_id || s.id;
-                if (sid === studentId) {
-                    return { ...s, ...cleanChanges };
-                }
+                if (sid === studentId) return { ...s, ...cleanChanges };
                 return s;
             }));
 
-            // Clear modifications for this student
             setModifiedStudents(prev => {
                 const next = { ...prev };
                 delete next[studentId];
                 return next;
             });
-            // Show success indicator briefly
+
             setSaveSuccess(prev => new Set(prev).add(studentId));
-            
+
             if (successTimeoutsRef.current[studentId]) {
                 clearTimeout(successTimeoutsRef.current[studentId]);
             }
@@ -302,8 +263,7 @@ const UpdateStudentDetails: React.FC<UpdateStudentDetailsProps> = ({ onBack }) =
             }, 3000);
 
         } catch (err: any) {
-            console.error('Update error:', err);
-            const errorMsg = err.response?.data?.error || err.message || "Failed to update student details";
+            const errorMsg = err.response?.data?.error || err.message || "Failed to update";
             setSaveErrors(prev => ({ ...prev, [studentId]: errorMsg }));
         } finally {
             setSavingIds(prev => {
@@ -322,15 +282,43 @@ const UpdateStudentDetails: React.FC<UpdateStudentDetailsProps> = ({ onBack }) =
         return name.includes(term) || admNo.includes(term) || rollNo.includes(term);
     });
 
-    const indexOfLastStudent = currentPage * studentsPerPage;
-    const indexOfFirstStudent = indexOfLastStudent - studentsPerPage;
+    const totalStudents = filteredStudents.length;
+    const totalPages = Math.ceil(totalStudents / STUDENTS_PER_PAGE);
+    const indexOfFirstStudent = (currentPage - 1) * STUDENTS_PER_PAGE;
+    const indexOfLastStudent = Math.min(indexOfFirstStudent + STUDENTS_PER_PAGE, totalStudents);
     const currentStudents = filteredStudents.slice(indexOfFirstStudent, indexOfLastStudent);
-    const totalPages = Math.ceil(filteredStudents.length / studentsPerPage);
 
     const activeCat = CATEGORIES.find(c => c.id === selectedCategory)!;
 
+    // Generate page numbers to show
+    const getPageNumbers = () => {
+        const pages: (number | string)[] = [];
+        const maxVisible = 7;
+
+        if (totalPages <= maxVisible) {
+            for (let i = 1; i <= totalPages; i++) pages.push(i);
+        } else {
+            if (currentPage <= 4) {
+                for (let i = 1; i <= 5; i++) pages.push(i);
+                pages.push('...');
+                pages.push(totalPages);
+            } else if (currentPage >= totalPages - 3) {
+                pages.push(1);
+                pages.push('...');
+                for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i);
+            } else {
+                pages.push(1);
+                pages.push('...');
+                for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
+                pages.push('...');
+                pages.push(totalPages);
+            }
+        }
+        return pages;
+    };
+
     return (
-        <div className="flex flex-col h-full bg-white">
+        <div className="flex flex-col h-screen overflow-hidden bg-white">
             {/* Top Toolbar */}
             <div className="p-4 border-b bg-gray-50 flex items-center justify-between shadow-sm">
                 <div className="flex items-center gap-4">
@@ -386,8 +374,8 @@ const UpdateStudentDetails: React.FC<UpdateStudentDetailsProps> = ({ onBack }) =
             </div>
 
             <div className="flex flex-1 overflow-hidden">
-                {/* Left Panel: Navigation */}
-                <div className="w-64 border-r bg-gray-50 overflow-y-auto flex-shrink-0">
+                {/* Left Panel */}
+                <div className="w-64 border-r bg-gray-50 flex-shrink-0">
                     <div className="p-4">
                         <h3 className="text-xs font-semibold text-gray-400 uppercase mb-4 tracking-widest">
                             Categories
@@ -409,8 +397,9 @@ const UpdateStudentDetails: React.FC<UpdateStudentDetailsProps> = ({ onBack }) =
                     </div>
                 </div>
 
-                {/* Right Panel: Data Table */}
+                {/* Right Panel */}
                 <div className="flex-1 flex flex-col overflow-hidden">
+                    {/* Table */}
                     <div className="flex-1 overflow-auto">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
@@ -544,7 +533,6 @@ const UpdateStudentDetails: React.FC<UpdateStudentDetailsProps> = ({ onBack }) =
                                                     );
                                                 })}
 
-                                                {/* Action Column */}
                                                 <td className="px-4 py-3 bg-violet-50">
                                                     <div className="flex flex-col gap-1 items-center">
                                                         {hasError && (
@@ -585,33 +573,62 @@ const UpdateStudentDetails: React.FC<UpdateStudentDetailsProps> = ({ onBack }) =
                         </table>
                     </div>
 
-                    {/* Pagination */}
-                    {totalPages > 1 && (
-                        <div className="p-4 border-t bg-gray-50 flex items-center justify-between">
-                            <span className="text-sm text-gray-600">
-                                Showing {indexOfFirstStudent + 1} to{' '}
-                                {Math.min(indexOfLastStudent, filteredStudents.length)} of{' '}
-                                {filteredStudents.length} students
+                    {/* Pagination Bar - like second image */}
+                    {totalStudents > 0 && (
+                        <div className="border-t bg-white px-6 py-3 flex items-center justify-between flex-shrink-0">
+                            {/* Left: Record info */}
+                            <span className="text-sm text-gray-500 italic">
+                                Showing {totalStudents === 0 ? 0 : indexOfFirstStudent + 1} to{' '}
+                                {indexOfLastStudent} of {totalStudents} records
                             </span>
-                            <div className="flex gap-2">
-                                <button
-                                    disabled={currentPage === 1}
-                                    onClick={() => setCurrentPage(prev => prev - 1)}
-                                    className="px-4 py-2 bg-white border border-gray-300 rounded-md text-sm disabled:opacity-50 hover:bg-gray-100 shadow-sm"
-                                >
-                                    Previous
-                                </button>
-                                <span className="px-4 py-2 text-sm text-gray-600">
-                                    {currentPage} / {totalPages}
-                                </span>
-                                <button
-                                    disabled={currentPage === totalPages}
-                                    onClick={() => setCurrentPage(prev => prev + 1)}
-                                    className="px-4 py-2 bg-white border border-gray-300 rounded-md text-sm disabled:opacity-50 hover:bg-gray-100 shadow-sm"
-                                >
-                                    Next
-                                </button>
-                            </div>
+
+                            {/* Right: Pagination controls */}
+                            {totalPages > 1 && (
+                                <div className="flex items-center gap-1">
+                                    {/* Previous */}
+                                    <button
+                                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                        disabled={currentPage === 1}
+                                        className={`px-3 py-1.5 text-sm rounded border transition-colors ${currentPage === 1
+                                            ? 'text-gray-300 border-gray-200 cursor-not-allowed bg-white'
+                                            : 'text-gray-600 border-gray-300 hover:bg-gray-100 bg-white cursor-pointer'
+                                            }`}
+                                    >
+                                        Previous
+                                    </button>
+
+                                    {/* Page Numbers */}
+                                    {getPageNumbers().map((page, index) => (
+                                        <React.Fragment key={index}>
+                                            {page === '...' ? (
+                                                <span className="px-2 py-1.5 text-sm text-gray-400">...</span>
+                                            ) : (
+                                                <button
+                                                    onClick={() => setCurrentPage(page as number)}
+                                                    className={`min-w-[34px] px-2 py-1.5 text-sm rounded border transition-colors ${currentPage === page
+                                                        ? 'bg-violet-600 text-white border-violet-600 font-semibold'
+                                                        : 'text-gray-600 border-gray-300 hover:bg-gray-100 bg-white'
+                                                        }`}
+                                                >
+                                                    {page}
+                                                </button>
+                                            )}
+                                        </React.Fragment>
+                                    ))}
+
+                                    {/* Next */}
+                                    <button
+                                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                        disabled={currentPage === totalPages}
+                                        className={`px-3 py-1.5 text-sm rounded border transition-colors ${currentPage === totalPages
+                                            ? 'text-gray-300 border-gray-200 cursor-not-allowed bg-white'
+                                            : 'text-gray-600 border-gray-300 hover:bg-gray-100 bg-white cursor-pointer'
+                                            }`}
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

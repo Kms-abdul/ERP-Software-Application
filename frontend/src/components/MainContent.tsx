@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Page } from '../App';
-import { SearchIcon, TimeIcon, ChevronDownIcon } from './icons';
 import SummaryBar from './SummaryBar';
 import dashboardImg from '../images/Dashboard.png';
 
@@ -23,45 +22,6 @@ const WelcomeBar: React.FC<WelcomeBarProps> = ({ navigateTo }) => {
 
     const savedUser = localStorage.getItem('user');
     const user = savedUser ? JSON.parse(savedUser) : null;
-
-    // --- Branch Logic (ID Based) ---
-    interface BranchOption { id: string; name: string; }
-    let branchOptions: BranchOption[] = [];
-
-    if (user?.allowed_branches && Array.isArray(user.allowed_branches)) {
-        branchOptions = user.allowed_branches.map((b: any) => ({
-            id: String(b.branch_id),
-            name: b.branch_name
-        }));
-    }
-    // Fallback
-    if (branchOptions.length === 0 && user?.branch) {
-        branchOptions = [{ id: user.branch, name: user.branch }];
-    }
-    // Admin View All
-    const canViewAll = user?.role === 'Admin';
-    const hasAll = branchOptions.some(b => b.id === 'All' || b.name === 'All');
-    if (canViewAll && !hasAll) {
-        branchOptions = [{ id: 'All', name: 'All Branches' }, ...branchOptions];
-    }
-
-    const showDropdown = branchOptions.length > 1;
-
-    // State
-    const [currentBranch, setCurrentBranch] = useState(() => {
-        const stored = localStorage.getItem('currentBranch');
-        if (stored) return stored;
-        if (canViewAll) return 'All';
-        return branchOptions.length > 0 ? branchOptions[0].id : 'All';
-    });
-
-    const handleBranchChange = (branchId: string) => {
-        localStorage.setItem('currentBranch', branchId);
-        setCurrentBranch(branchId);
-        window.location.reload();
-    };
-
-    const currentBranchName = branchOptions.find(b => b.id === currentBranch)?.name || currentBranch;
 
     return (
         <div className="bg-white shadow-sm">
@@ -95,12 +55,15 @@ const DashboardHome: React.FC = () => {
     return (
         <div className="p-2 md:p-2 space-y-2">
             <SummaryBar />
-            <div className="flex justify-center w-full mt-14">
+            <div className="w-full mt-4 flex flex-col items-center">
+                <h2 className="text-M font-medium text-green-600">
+                    MS Hifz Academy - Academy Learning Overview
+                </h2>
                 <img
                     src={dashboardImg}
                     alt="Dashboard Illustration"
-                    className="max-w-full h-auto rounded-lg shadow-sm"
-                    style={{ maxHeight: '55vh', objectFit: 'contain' }}
+                    className="w-full h-auto rounded-lg shadow-sm"
+                    style={{ maxHeight: '55vh', objectFit: 'cover' }}
                 />
             </div>
         </div>
