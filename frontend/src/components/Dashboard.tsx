@@ -14,6 +14,7 @@ import SetupSchool from './SetupSchool';
 import ClassesManagement from './ClassesManagement';
 import AcademicManagement from './AcademicManagement';
 import Academics from './Academics';
+import StaffSupport from './StaffSupport';
 import StudentAttendance from './StudentAttendance';
 import StudentAdministration from './StudentAdministration';
 import ConcessionMaster from './ConcessionMaster';
@@ -75,6 +76,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
           {currentPage === 'student-attendance' && <StudentAttendance navigateTo={navigateTo} />}
           {currentPage === 'attendance-report' && <StudentAttendance navigateTo={navigateTo} defaultTab="absent-report" />}
           {currentPage === 'student-administration' && <StudentAdministration navigateTo={navigateTo} />}
+          {currentPage === 'staff-support' && <StaffSupport />}
           {currentPage === 'concession-master' && <ConcessionMaster />}
           {currentPage === 'student-concession' && <StudentConcession />}
           {currentPage === 'update-student-fee-structure' && <UpdateStudentFeeStructure />}

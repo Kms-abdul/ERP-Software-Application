@@ -29,7 +29,8 @@ export type Page =
   | "configuration"
   | "document-administration"
   | "student-document-management"
-  | "document-management";
+  | "document-management"
+  | "staff-support";
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {

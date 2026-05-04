@@ -53,20 +53,16 @@ const WelcomeBar: React.FC<WelcomeBarProps> = ({ navigateTo }) => {
 
 const DashboardHome: React.FC = () => {
     return (
-        <div className="p-2 md:p-2 space-y-2">
+        <div className="p-2 md:p-2 space-y-3">
             <SummaryBar />
-            <div className="w-full mt-4 flex flex-col items-center">
-                <h2 className="text-M font-medium text-green-600">
-                    MS Hifz Academy - Academy Learning Overview
-                </h2>
                 <img
                     src={dashboardImg}
                     alt="Dashboard Illustration"
                     className="w-full h-auto rounded-lg shadow-sm"
-                    style={{ maxHeight: '54vh', objectFit: 'cover' }}
+                    style={{ maxHeight: '55vh', objectFit: 'cover' }}
                 />
             </div>
-        </div>
+        
     );
 };
 

@@ -69,12 +69,18 @@ const FilterContainer = ({ children }: { children: React.ReactNode }) => (
 const Pagination = ({ currentPage, totalPages, onPageChange, totalRecords, perPage }: any) => {
     if (totalPages <= 1) return null;
 
+    const visiblePages = 3;
+    const startPage = Math.max(1, Math.min(currentPage, totalPages - visiblePages + 1));
+    const endPage = Math.min(totalPages, startPage + visiblePages - 1);
+    const pages = Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i);
+    const showLastPage = endPage < totalPages;
+
     return (
-        <div className="p-4 border-t bg-gray-50 flex items-center justify-between">
+        <div className="p-4 border-t bg-gray-50 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <span className="text-sm text-gray-500 italic">
                 Showing {((currentPage - 1) * perPage) + 1} to {Math.min(currentPage * perPage, totalRecords)} of {totalRecords} records
             </span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-wrap">
                 <button
                     disabled={currentPage === 1}
                     onClick={() => onPageChange(currentPage - 1)}
@@ -83,7 +89,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange, totalRecords, perPa
                     Previous
                 </button>
 
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                {pages.map(p => (
                     <button
                         key={p}
                         onClick={() => onPageChange(p)}
@@ -95,6 +101,21 @@ const Pagination = ({ currentPage, totalPages, onPageChange, totalRecords, perPa
                         {p}
                     </button>
                 ))}
+
+                {showLastPage && (
+                    <>
+                        <span className="px-1 text-sm text-gray-400">...</span>
+                        <button
+                            onClick={() => onPageChange(totalPages)}
+                            className={`min-w-[28px] px-1.5 py-0.5 text-sm font-semibold transition-colors ${currentPage === totalPages
+                                ? 'text-indigo-700 underline underline-offset-4'
+                                : 'text-gray-500 hover:text-gray-800'
+                                }`}
+                        >
+                            {totalPages}
+                        </button>
+                    </>
+                )}
 
                 <button
                     disabled={currentPage === totalPages}
