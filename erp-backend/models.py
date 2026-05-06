@@ -378,6 +378,12 @@ class FeePayment(db.Model, AuditMixin):
 
     note = db.Column(db.String(25))
     TransactionDetails=db.Column(db.String(100))
+    
+    # Cheque Specific Fields
+    cheque_no = db.Column(db.String(50))
+    bank_name = db.Column(db.String(100))
+    cheque_date = db.Column(db.Date)
+    
     collected_by = db.Column(db.Integer) # User ID
     collected_by_name = db.Column(db.String(100)) # User Name (Added per request)
 

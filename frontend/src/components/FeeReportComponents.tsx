@@ -171,7 +171,7 @@ const filterData = (data: any[], filters: any) => {
     if (filters.feeType && filters.feeType !== 'All') {
         return filtered.map(r => {
             if (!r.line_items || !Array.isArray(r.line_items)) return r;
-            
+
             const matchingItems = r.line_items.filter((item: any) => item.fee_type_str?.includes(filters.feeType));
             if (matchingItems.length === 0) return r; // Fallback
 
@@ -180,7 +180,7 @@ const filterData = (data: any[], filters: any) => {
             const newConcession = matchingItems.reduce((sum: number, item: any) => sum + (Number(item.concession) || 0), 0);
             const newDue = matchingItems.reduce((sum: number, item: any) => sum + (Number(item.due_amount) || 0), 0);
             const newNet = matchingItems.reduce((sum: number, item: any) => sum + (Number(item.net_payable) || 0), 0);
-            
+
             const uniqueFeeTypes = Array.from(new Set(matchingItems.map((item: any) => item.fee_type_str))).join(", ");
 
             return {
@@ -357,8 +357,17 @@ const FullReceiptsTable: React.FC<{
                                 <td className="px-3 py-2 text-right font-bold text-gray-800">₹{(r.amount_paid || r.amount || 0).toLocaleString()}</td>
                                 <td className="px-3 py-2 text-right text-red-500">₹{(r.due_amount || 0).toLocaleString()}</td>
                                 <td className="px-3 py-2">{r.mode}</td>
-                                <td className="px-3 py-2 text-xs truncate max-w-[150px]" title={r.transaction_id}>{r.transaction_id || '-'}</td>
-                                {showAllColumns && <td className="px-3 py-2 text-xs truncate max-w-[150px]" title={r.note}>{r.note || '-'}</td>}
+                                <td className="px-3 py-2 text-xs max-w-[150px]">
+                                    {r.mode === 'Cheque' ? (
+                                        <div className="truncate" title={`Chq: ${r.cheque_no || '-'} | ${r.bank_name || '-'} | ${r.cheque_date || '-'}`}>
+                                            <div>{r.cheque_no || '-'}</div>
+                                            <div className="text-gray-400">{r.bank_name || '-'}</div>
+                                            <div className="text-gray-400">{r.cheque_date || '-'}</div>
+                                        </div>
+                                    ) : (
+                                        <div className="truncate" title={r.transaction_id}>{r.transaction_id || '-'}</div>
+                                    )}
+                                </td>                                {showAllColumns && <td className="px-3 py-2 text-xs truncate max-w-[150px]" title={r.note}>{r.note || '-'}</td>}
                                 <td className="px-3 py-2 text-xs text-gray-500">
                                     {r.date} <br /> {r.time}
                                 </td>
@@ -414,9 +423,7 @@ const downloadExcelReport = (receipts: any[], filename: string) => {
         Paid: r.amount_paid || r.amount,
         Due: r.due_amount || 0,
         Mode: r.mode,
-        TransactionID: r.transaction_id || '-',
-        Note: r.note,
-        Date: r.date,
+        TransactionID: r.mode === 'Cheque' ? `Chq: ${r.cheque_no || '-'} | ${r.bank_name || '-'} | ${r.cheque_date || '-'}` : (r.transaction_id || '-'), Date: r.date,
         Time: r.time,
         TakenBy: r.collected_by
     }));
@@ -454,8 +461,7 @@ const downloadPDFReport = (receipts: any[], title: string, filename: string) => 
         r.amount_paid || r.amount,
         r.due_amount || 0,
         r.mode,
-        r.transaction_id || '-',
-        `${r.date} ${r.time}`,
+        r.mode === 'Cheque' ? `Chq: ${r.cheque_no || '-'} | ${r.bank_name || '-'} | ${r.cheque_date || '-'}` : (r.transaction_id || '-'), `${r.date} ${r.time}`,
         r.collected_by
     ]));
 
