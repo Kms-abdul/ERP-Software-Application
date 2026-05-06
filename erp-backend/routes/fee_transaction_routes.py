@@ -209,12 +209,11 @@ def get_student_fees_detail(current_user, student_id):
         return jsonify({"error": str(e)}), 500
 
 
-def _process_fee_allocation(alloc, student, receipt_no, payment_mode, payment_date, note, transaction_details, current_user):
+def _process_fee_allocation(alloc, student, receipt_no, payment_mode, payment_date, note, transaction_details, current_user, cheque_no=None, bank_name=None, cheque_date=None):
     amount = Decimal(str(alloc.get("amount", 0)))
     concession_val = Decimal(str(alloc.get("concession_amount", 0)))
     if amount <= 0 and concession_val <= 0:
         return Decimal(0)
-
     sf = StudentFee.query.get(alloc.get("student_fee_id"))
     if not sf or not sf.is_active:
         return Decimal(0)
@@ -269,6 +268,9 @@ def _process_fee_allocation(alloc, student, receipt_no, payment_mode, payment_da
         payment_year=payment_date.year,
         note=note,
         TransactionDetails=transaction_details,
+        cheque_no=cheque_no,
+        bank_name=bank_name,
+        cheque_date=cheque_date,
         collected_by=current_user.user_id,
         collected_by_name=current_user.username 
     )
@@ -309,6 +311,24 @@ def record_fee_payment(current_user):
                 "error": "UPI/Card Transaction Description is required for UPI and CardSwap payments."
             }), 400
 
+    cheque_no = data.get("cheque_no")
+    bank_name = data.get("bank_name")
+    cheque_date_str = data.get("cheque_date")
+    cheque_date_val = None
+
+    if payment_mode == "Cheque":
+        if not cheque_no or not str(cheque_no).strip():
+            return jsonify({"error": "Cheque No is required for Cheque payments."}), 400
+        if not bank_name or not str(bank_name).strip():
+            return jsonify({"error": "Bank Name is required for Cheque payments."}), 400
+        if not cheque_date_str or not str(cheque_date_str).strip():
+            return jsonify({"error": "Cheque Date is required for Cheque payments."}), 400
+        
+        try:
+            cheque_date_val = datetime.strptime(cheque_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": "Invalid Cheque Date format. Use YYYY-MM-DD"}), 400
+
     h_year, err, code = require_academic_year()
     if err:
         return err, code
@@ -342,7 +362,7 @@ def record_fee_payment(current_user):
         receipt_no = SequenceService.generate_receipt_number(branch_id, ay_id, include_prefix=False)
 
         total_allocated = sum(
-            _process_fee_allocation(alloc, student, receipt_no, payment_mode, payment_date, note, transaction_details, current_user)
+            _process_fee_allocation(alloc, student, receipt_no, payment_mode, payment_date, note, transaction_details, current_user, cheque_no, bank_name, cheque_date_val)
             for alloc in allocations
         )
         

@@ -35,6 +35,9 @@ def consolidate_receipts(payments):
                 "mode": p.payment_mode,
                 "note": p.note,
                 "transaction_id": p.TransactionDetails,
+                "cheque_no": p.cheque_no,
+                "bank_name": p.bank_name,
+                "cheque_date": p.cheque_date.isoformat() if p.cheque_date else None,
                 "collected_by": p.collected_by_name,
                 "fee_types": [],
                 "line_items":[]
