@@ -26,6 +26,7 @@ export interface Receipt {
     collected_by?: string;
     date?: string;
     time?: string;
+    transaction_id?: string;
 }
 
 interface ReportProps {
@@ -159,7 +160,7 @@ const useClassSections = (selectedClass: string) => {
 // Logic Helpers
 const filterData = (data: any[], filters: any) => {
     if (!data) return [];
-    return data.filter(r => {
+    const filtered = data.filter(r => {
         if (filters.class && filters.class !== 'All' && r.class !== filters.class) return false;
         if (filters.section && filters.section !== 'All' && r.section !== filters.section) return false;
         if (filters.feeType && filters.feeType !== 'All' && !r.fee_type_str?.includes(filters.feeType)) return false;
@@ -167,7 +168,37 @@ const filterData = (data: any[], filters: any) => {
         if (filters.collector && filters.collector !== 'All' && r.collected_by !== filters.collector) return false;
         return true;
     });
+    if (filters.feeType && filters.feeType !== 'All') {
+        return filtered.map(r => {
+            if (!r.line_items || !Array.isArray(r.line_items)) return r;
+            
+            const matchingItems = r.line_items.filter((item: any) => item.fee_type_str?.includes(filters.feeType));
+            if (matchingItems.length === 0) return r; // Fallback
+
+            const newAmountPaid = matchingItems.reduce((sum: number, item: any) => sum + (Number(item.amount_paid) || 0), 0);
+            const newGross = matchingItems.reduce((sum: number, item: any) => sum + (Number(item.gross_amount) || 0), 0);
+            const newConcession = matchingItems.reduce((sum: number, item: any) => sum + (Number(item.concession) || 0), 0);
+            const newDue = matchingItems.reduce((sum: number, item: any) => sum + (Number(item.due_amount) || 0), 0);
+            const newNet = matchingItems.reduce((sum: number, item: any) => sum + (Number(item.net_payable) || 0), 0);
+            
+            const uniqueFeeTypes = Array.from(new Set(matchingItems.map((item: any) => item.fee_type_str))).join(", ");
+
+            return {
+                ...r,
+                amount_paid: newAmountPaid,
+                amount: newAmountPaid,
+                gross_amount: newGross,
+                concession: newConcession,
+                due_amount: newDue,
+                net_payable: newNet,
+                fee_type_str: uniqueFeeTypes
+            };
+        });
+    }
+
+    return filtered;
 };
+
 
 const calculateSummary = (receipts: any[]) => {
     const total = receipts.reduce((sum, r) => sum + Number(r.amount_paid || r.amount || 0), 0);
@@ -301,6 +332,7 @@ const FullReceiptsTable: React.FC<{
                         <th className="px-3 py-2 text-right font-semibold">Paid</th>
                         <th className="px-3 py-2 text-right font-semibold">Due</th>
                         <th className="px-3 py-2 text-left font-semibold">Mode</th>
+                        <th className="px-3 py-2 text-left font-semibold">Trans ID</th>
                         {showAllColumns && <th className="px-3 py-2 text-left font-semibold">Note</th>}
                         <th className="px-3 py-2 text-left font-semibold">Date/Time</th>
                         <th className="px-3 py-2 text-left font-semibold">Taken By</th>
@@ -325,6 +357,7 @@ const FullReceiptsTable: React.FC<{
                                 <td className="px-3 py-2 text-right font-bold text-gray-800">₹{(r.amount_paid || r.amount || 0).toLocaleString()}</td>
                                 <td className="px-3 py-2 text-right text-red-500">₹{(r.due_amount || 0).toLocaleString()}</td>
                                 <td className="px-3 py-2">{r.mode}</td>
+                                <td className="px-3 py-2 text-xs truncate max-w-[150px]" title={r.transaction_id}>{r.transaction_id || '-'}</td>
                                 {showAllColumns && <td className="px-3 py-2 text-xs truncate max-w-[150px]" title={r.note}>{r.note || '-'}</td>}
                                 <td className="px-3 py-2 text-xs text-gray-500">
                                     {r.date} <br /> {r.time}
@@ -344,7 +377,7 @@ const FullReceiptsTable: React.FC<{
                     {/* Add empty rows to maintain height */}
                     {currentReceipts.length < rowsPerPage && Array.from({ length: rowsPerPage - currentReceipts.length }).map((_, i) => (
                         <tr key={`empty-${i}`} className="h-[45px]">
-                            <td colSpan={17}>&nbsp;</td>
+                            <td colSpan={18}>&nbsp;</td>
                         </tr>
                     ))}
                 </tbody>
@@ -381,6 +414,7 @@ const downloadExcelReport = (receipts: any[], filename: string) => {
         Paid: r.amount_paid || r.amount,
         Due: r.due_amount || 0,
         Mode: r.mode,
+        TransactionID: r.transaction_id || '-',
         Note: r.note,
         Date: r.date,
         Time: r.time,
@@ -407,7 +441,7 @@ const downloadPDFReport = (receipts: any[], title: string, filename: string) => 
 
     const tableColumn = [
         "Student", "Adm No", "Class", "Branch", "Receipt",
-        "Fee Type", "Paid", "Due", "Mode", "Date", "Taken By"
+        "Fee Type", "Paid", "Due", "Mode", "Trans ID", "Date", "Taken By"
     ];
 
     const tableRows = receipts.map((r: any) => ([
@@ -420,6 +454,7 @@ const downloadPDFReport = (receipts: any[], title: string, filename: string) => 
         r.amount_paid || r.amount,
         r.due_amount || 0,
         r.mode,
+        r.transaction_id || '-',
         `${r.date} ${r.time}`,
         r.collected_by
     ]));
@@ -2227,8 +2262,6 @@ export const LateFeeDueReport: React.FC = () => {
         </div>
     );
 };
-
-
 export default {
     TodayCollection,
     DailyReport,
