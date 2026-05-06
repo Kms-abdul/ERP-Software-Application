@@ -34,8 +34,10 @@ def consolidate_receipts(payments):
                 "time": to_local_time(p.created_at).strftime("%I:%M %p") if p.created_at else "",
                 "mode": p.payment_mode,
                 "note": p.note,
+                "transaction_id": p.TransactionDetails,
                 "collected_by": p.collected_by_name,
-                "fee_types": []
+                "fee_types": [],
+                "line_items":[]
             }
         
         key = f"{p.branch}_{p.receipt_no}"
@@ -51,7 +53,16 @@ def consolidate_receipts(payments):
         f_name = f"{p.fee_type or ''} {p.installment_name or ''}".strip()
         if f_name and f_name not in item["fee_types"]:
             item["fee_types"].append(f_name)
-
+        item["line_items"].append({
+            "fee_type": p.fee_type,
+            "installment_name": p.installment_name,
+            "fee_type_str": f_name,
+            "gross_amount": float(p.gross_amount or 0),
+            "concession": float(p.concession_amount or 0),
+            "net_payable": float(p.net_payable or 0),
+            "amount_paid": float(p.amount_paid or 0),
+            "due_amount": float(p.due_amount or 0)
+        })
     final_receipts = []
     # Sort by recent first (assuming input was sorted, but we iterate dict. Python 3.7+ preserves insertion order)
     # The input 'payments' should be sorted.
