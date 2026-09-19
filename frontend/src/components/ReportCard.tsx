@@ -237,18 +237,19 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-0.5">
         <div className="border border-indigo-900 rounded-lg overflow-hidden shadow-sm">
           <div className="bg-[#4a235a] text-white px-4 py-2 text-sm font-semibold">Student Detail</div>
-          <div className="p-4 grid grid-cols-[1fr,2fr] gap-y-2 text-sm font-semibold">
-            <span className="text-black-600">Student Name</span>
-            <span className="text-black-900">: {data.student?.studentName || 'N/A'}</span>
-            <span className="text-black-600">Father's Name</span>
-            <span className="text-black-900">: {data.student?.fathersName || 'N/A'}</span>
-            <span className="text-black-600">Class/ Section</span>
-            <span className="text-black-600">Group/ Roll No</span>
-            <span className="text-black-900">: {data.student?.groupRollNo || 'N/A'}</span>
-            <span className="text-black-600">Branch Name</span>
-            <span className="text-black-900">: {formatReportBranch(data.student?.branchName)}</span>
-            <span className="text-black-600">Academic Year</span>
-            <span className="text-black-900">: {data.student?.academicYear || 'N/A'}</span>
+          <div className="p-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm font-semibold">
+            <span className="text-gray-700 whitespace-nowrap">Student Name</span>
+            <span className="text-gray-900">: {data.student?.studentName || 'N/A'}</span>
+            <span className="text-gray-700 whitespace-nowrap">Father's Name</span>
+            <span className="text-gray-900">: {data.student?.fathersName || 'N/A'}</span>
+            <span className="text-gray-700 whitespace-nowrap">Class/ Section</span>
+            <span className="text-gray-900">: {data.student?.classSection || 'N/A'}</span>
+            <span className="text-gray-700 whitespace-nowrap">Group/ Roll No</span>
+            <span className="text-gray-900">: {data.student?.groupRollNo || 'N/A'}</span>
+            <span className="text-gray-700 whitespace-nowrap">Branch Name</span>
+            <span className="text-gray-900">: {formatReportBranch(data.student?.branchName)}</span>
+            <span className="text-gray-700 whitespace-nowrap">Academic Year</span>
+            <span className="text-gray-900">: {data.student?.academicYear || 'N/A'}</span>
           </div>
         </div>
 
