@@ -1104,11 +1104,13 @@ def get_student_receipts(current_user, student_id):
             if rno not in grouped:
                 grouped[rno] = {
                     "receipt_no": rno,
+                    "student_id": student.student_id,
                     "student_name": f"{student.first_name or ''} {student.last_name or ''}".strip(),
                     "admission_no": student.admission_no,
                     "class": p.class_name,
                     "section": p.section,
                     "branch": p.branch,
+                    "academic_year": p.academic_year,
                     "date": p.payment_date.strftime("%d-%m-%Y") if p.payment_date else None,
                     "time": "",
                     "mode": p.payment_mode,
@@ -1171,9 +1173,58 @@ def update_receipt_details(current_user, receipt_no):
 
         data = request.json or {}
 
-        payments = FeePayment.query.filter_by(receipt_no=receipt_no, status='A').all()
+        # 1. Scoping parameters: student_id, branch, academic_year
+        target_student_id = data.get("student_id") or request.args.get("student_id")
+        target_adm_no = data.get("admission_no") or request.args.get("admission_no")
+        target_year = data.get("academic_year") or request.args.get("academic_year") or request.headers.get("X-Academic-Year")
+
+        # Branch determination
+        if not has_global_branch_access(current_user):
+            target_branch = current_user.branch
+        else:
+            target_branch = data.get("branch") or request.args.get("branch") or request.headers.get("X-Branch")
+
+        # Base query
+        query = FeePayment.query.filter(FeePayment.receipt_no == receipt_no, FeePayment.status == 'A')
+
+        # Student filter
+        if target_student_id:
+            try:
+                query = query.filter(FeePayment.student_id == int(target_student_id))
+            except (ValueError, TypeError):
+                pass
+        elif target_adm_no:
+            matched_student = Student.query.filter_by(admission_no=target_adm_no).first()
+            if matched_student:
+                query = query.filter(FeePayment.student_id == matched_student.student_id)
+
+        # Branch filter
+        if target_branch and target_branch not in ('All', 'All Branches', 'AllBranches', 'All Locations', 'all', 'all branches'):
+            clean_b = target_branch.replace("MS HifzAcademy", "").replace("MS Education Academy", "").strip()
+            query = query.filter(
+                or_(
+                    FeePayment.branch == target_branch,
+                    FeePayment.branch == clean_b,
+                    FeePayment.branch == f"MS HifzAcademy {clean_b}",
+                    FeePayment.branch.ilike(f"%{clean_b}%")
+                )
+            )
+
+        # Academic year filter
+        if target_year and target_year not in ('All', 'All Years', 'all'):
+            query = query.filter(FeePayment.academic_year == target_year)
+
+        payments = query.all()
         if not payments:
             return jsonify({"error": "Receipt not found or already cancelled"}), 404
+
+        # Safety Collision Guard: ensure we NEVER accidentally update across multiple students or branches
+        distinct_students = set(p.student_id for p in payments)
+        distinct_branches = set(p.branch for p in payments)
+        if len(distinct_students) > 1 or len(distinct_branches) > 1:
+            return jsonify({
+                "error": f"Ambiguous receipt update: receipt no '{receipt_no}' exists in multiple branches/students. Please specify branch and student ID."
+            }), 400
 
         new_mode = data.get("mode")
         new_date_str = data.get("date")

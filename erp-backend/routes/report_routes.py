@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from extensions import db, to_local_time
 from models import FeePayment, Student, StudentFee, RemittanceMaster, Branch
 from helpers import token_required, require_academic_year, has_global_branch_access, user_can_access_branch
@@ -22,6 +22,8 @@ def consolidate_receipts(payments):
                 "receipt_no": p.receipt_no,
                 "student_name": (p.student.first_name if p.student else "Unknown") + " " + (p.student.last_name if p.student and p.student.last_name else ""),
                 "admission_no": p.student.admission_no if p.student else "",
+                "student_id": p.student_id,
+                "academic_year": p.academic_year,
                 "class": p.class_name,
                 "section": p.section,
                 "branch": p.branch,
@@ -124,7 +126,6 @@ def report_fee_today(current_user):
     except Exception as e:
         current_app.logger.exception("standard fee due report failed")
         return jsonify({"error": "Failed to generate report"}), 500
-@bp.route("/api/reports/fees/daily", methods=["GET"])
 @bp.route("/api/reports/fees/daily", methods=["GET"])
 @token_required
 def report_fee_daily(current_user):
@@ -721,26 +722,58 @@ def get_receipt_data(current_user, receipt_no):
         # Scoped by Branch (if strict) and Year
         # Actually receipt_no should be unique regardless of year, but we enforce year check for security context
         query = FeePayment.query.options(selectinload(FeePayment.student)).filter_by(receipt_no=receipt_no) #, academic_year=h_year) 
-        # Note: If we enforce year check, user can't view old receipts easily if they switched year? 
-        # But instructions say "Receipts must be fetched by receipt_no + branch + academic_year."
-        query = query.filter_by(academic_year=h_year)
+        query = query.filter(
+            or_(
+                FeePayment.academic_year == h_year,
+                FeePayment.academic_year.is_(None)
+            )
+        )
+
+        target_student_id = request.args.get("student_id")
 
         # Strict Branch Logic
         if has_global_branch_access(current_user):
-            target_branch = request.headers.get("X-Branch", "All")
+            target_branch = request.args.get("branch") or request.headers.get("X-Branch", "All")
         else:
              target_branch = current_user.branch
-             if not target_branch or target_branch in ['All', 'AllBranches']:
+             if not target_branch or target_branch in ['All', 'AllBranches', 'All Locations']:
                   return jsonify({"error": "Unauthorized"}), 403
 
-        if target_branch and target_branch not in ['All', 'AllBranches']:
-            query = query.filter_by(branch=target_branch)
+        if target_branch and target_branch not in ['All', 'AllBranches', 'All Locations', 'all', 'all branches']:
+            clean_b = target_branch.replace("MS HifzAcademy", "").replace("MS Education Academy", "").strip()
+            if clean_b:
+                branch_aliases = {
+                    target_branch,
+                    target_branch.strip(),
+                    clean_b,
+                    f"MS HifzAcademy {clean_b}",
+                    f"MS Education Academy {clean_b}"
+                }
+                branch_obj = Branch.query.filter(
+                    or_(
+                        Branch.branch_name == clean_b,
+                        Branch.branch_code == clean_b,
+                        Branch.branch_name == target_branch,
+                        Branch.branch_code == target_branch
+                    )
+                ).first()
+                if branch_obj:
+                    if branch_obj.branch_name:
+                        branch_aliases.add(branch_obj.branch_name)
+                    if branch_obj.branch_code:
+                        branch_aliases.add(branch_obj.branch_code)
+                query = query.filter(FeePayment.branch.in_(list(branch_aliases)))
+            else:
+                query = query.filter(FeePayment.branch == target_branch)
+
+        if target_student_id:
+            try:
+                query = query.filter(FeePayment.student_id == int(target_student_id))
+            except (ValueError, TypeError):
+                pass
             
         payments = query.all()
         
-        if not payments:
-            return jsonify({"error": "Receipt not found"}), 404
-            
         if not payments:
             return jsonify({"error": "Receipt not found"}), 404
             
@@ -782,6 +815,11 @@ def get_receipt_data(current_user, receipt_no):
             "paymentDate": first.payment_date.isoformat(),
             "paymentMode": first.payment_mode,
             "paymentNote": first.note,
+            "transactionId": first.TransactionDetails or "",
+            "transaction_id": first.TransactionDetails or "",
+            "chequeNo": first.cheque_no or "",
+            "bankName": first.bank_name or "",
+            "chequeDate": first.cheque_date.isoformat() if first.cheque_date else None,
             "items": items,
             "amount": total_gross, # Gross
             "concession": total_concession,

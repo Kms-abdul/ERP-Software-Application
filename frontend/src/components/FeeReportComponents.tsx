@@ -31,7 +31,7 @@ export interface Receipt {
 }
 
 interface ReportProps {
-    onViewReceipt: (receiptNo: string) => void;
+    onViewReceipt: (receiptNo: string, branch?: string, studentId?: number) => void;
     forcedStatus?: 'A' | 'I' | 'All';
     forcedConcession?: boolean;
     singleDayOnly?: boolean;
@@ -340,7 +340,7 @@ const SummaryTables = ({ modeSummary, collectedBySummary, totalCollection }: {
 // Full Featured Receipts Table
 const FullReceiptsTable: React.FC<{
     receipts: any[];
-    onViewReceipt: (id: string) => void;
+    onViewReceipt: (id: string, branch?: string, studentId?: number) => void;
     showAllColumns?: boolean;
 }> = ({ receipts, onViewReceipt, showAllColumns = true }) => {
     const [currentPage, setCurrentPage] = useState(1);
@@ -429,7 +429,7 @@ const FullReceiptsTable: React.FC<{
                                     <td className="px-3 py-2">{r.collected_by}</td>
                                     <td className="px-3 py-2 text-center">
                                         <button
-                                            onClick={() => onViewReceipt(r.receipt_no)}
+                                            onClick={() => onViewReceipt(r.receipt_no, r.branch, r.student_id)}
                                             className="text-white bg-violet-600 hover:bg-violet-700 px-3 py-1 rounded text-xs"
                                         >
                                             View
@@ -2545,9 +2545,18 @@ export const SearchStudentReport: React.FC<ReportProps> = ({ onViewReceipt }) =>
         if (!editingReceipt) return;
         try {
             setSaving(true);
+            const targetStudentId = selectedStudent?.student_id || selectedStudent?.id || editingReceipt.student_id;
+            const targetBranch = editingReceipt.branch || selectedStudent?.branch || currentBranch;
+            const targetYear = editingReceipt.academic_year || localStorage.getItem('academicYear');
+            const targetAdmNo = selectedStudent?.admission_no || selectedStudent?.adm_no || editingReceipt.admission_no;
+
             const payload: any = {
                 mode: editForm.mode,
-                date: editForm.date
+                date: editForm.date,
+                student_id: targetStudentId,
+                branch: targetBranch,
+                academic_year: targetYear,
+                admission_no: targetAdmNo
             };
             if (editForm.mode === 'Cheque') {
                 payload.cheque_no = editForm.cheque_no;
@@ -2773,7 +2782,7 @@ export const SearchStudentReport: React.FC<ReportProps> = ({ onViewReceipt }) =>
                                             <td className="px-3 py-2 text-center">
                                                 <div className="flex gap-1 justify-center">
                                                     <button
-                                                        onClick={() => onViewReceipt(r.receipt_no)}
+                                                        onClick={() => onViewReceipt(r.receipt_no, r.branch || selectedStudent?.branch, r.student_id || selectedStudent?.id || selectedStudent?.student_id)}
                                                         className="text-white bg-violet-600 hover:bg-violet-700 px-2 py-1 rounded text-xs"
                                                     >
                                                         View

@@ -75,10 +75,17 @@ const AdjustFeeReport: React.FC = () => {
     const [receiptData, setReceiptData] = useState<any>(null);
     const [loadingReceipt, setLoadingReceipt] = useState(false);
 
-    const handleViewReceipt = async (receiptNo: string) => {
+    const handleViewReceipt = async (receiptNo: string, branch?: string, studentIdParam?: number) => {
         try {
             setLoadingReceipt(true);
-            const res = await api.get(`/reports/fees/receipt/${receiptNo}`);
+            const params: any = {};
+            if (branch && branch !== 'All' && branch !== 'All Branches' && branch !== 'All Locations') {
+                params.branch = branch;
+            }
+            if (studentIdParam) {
+                params.student_id = studentIdParam;
+            }
+            const res = await api.get(`/reports/fees/receipt/${receiptNo}`, { params });
             const payments = res.data.items || [];
             if (payments.length === 0) {
                 alert("No items found in this receipt.");
