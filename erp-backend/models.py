@@ -35,6 +35,31 @@ class AuditLog(db.Model):
         db.Index("idx_audit_user", "user_id"),
         db.Index("idx_audit_timestamp", "timestamp"),
     )
+
+    def __init__(
+        self,
+        table_name=None,
+        record_id=None,
+        module=None,
+        action=None,
+        old_data=None,
+        new_data=None,
+        user_id=None,
+        ip_address=None,
+        timestamp=None,
+        **kwargs
+    ):
+        self.table_name = table_name
+        self.record_id = record_id
+        self.module = module
+        self.action = action
+        self.old_data = old_data
+        self.new_data = new_data
+        self.user_id = user_id
+        self.ip_address = ip_address
+        self.timestamp = timestamp
+        for k, v in kwargs.items():
+            setattr(self, k, v)
     
 class AuditMixin(object):
     """

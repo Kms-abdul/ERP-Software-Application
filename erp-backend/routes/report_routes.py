@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from extensions import db, to_local_time
 from models import FeePayment, Student, StudentFee, RemittanceMaster, Branch
 from helpers import token_required, require_academic_year, has_global_branch_access, user_can_access_branch
@@ -126,7 +126,6 @@ def report_fee_today(current_user):
     except Exception as e:
         current_app.logger.exception("standard fee due report failed")
         return jsonify({"error": "Failed to generate report"}), 500
-@bp.route("/api/reports/fees/daily", methods=["GET"])
 @bp.route("/api/reports/fees/daily", methods=["GET"])
 @token_required
 def report_fee_daily(current_user):
@@ -723,9 +722,12 @@ def get_receipt_data(current_user, receipt_no):
         # Scoped by Branch (if strict) and Year
         # Actually receipt_no should be unique regardless of year, but we enforce year check for security context
         query = FeePayment.query.options(selectinload(FeePayment.student)).filter_by(receipt_no=receipt_no) #, academic_year=h_year) 
-        # Note: If we enforce year check, user can't view old receipts easily if they switched year? 
-        # But instructions say "Receipts must be fetched by receipt_no + branch + academic_year."
-        query = query.filter_by(academic_year=h_year)
+        query = query.filter(
+            or_(
+                FeePayment.academic_year == h_year,
+                FeePayment.academic_year.is_(None)
+            )
+        )
 
         target_student_id = request.args.get("student_id")
 
@@ -739,14 +741,30 @@ def get_receipt_data(current_user, receipt_no):
 
         if target_branch and target_branch not in ['All', 'AllBranches', 'All Locations', 'all', 'all branches']:
             clean_b = target_branch.replace("MS HifzAcademy", "").replace("MS Education Academy", "").strip()
-            query = query.filter(
-                or_(
-                    FeePayment.branch == target_branch,
-                    FeePayment.branch == clean_b,
-                    FeePayment.branch == f"MS HifzAcademy {clean_b}",
-                    FeePayment.branch.ilike(f"%{clean_b}%")
-                )
-            )
+            if clean_b:
+                branch_aliases = {
+                    target_branch,
+                    target_branch.strip(),
+                    clean_b,
+                    f"MS HifzAcademy {clean_b}",
+                    f"MS Education Academy {clean_b}"
+                }
+                branch_obj = Branch.query.filter(
+                    or_(
+                        Branch.branch_name == clean_b,
+                        Branch.branch_code == clean_b,
+                        Branch.branch_name == target_branch,
+                        Branch.branch_code == target_branch
+                    )
+                ).first()
+                if branch_obj:
+                    if branch_obj.branch_name:
+                        branch_aliases.add(branch_obj.branch_name)
+                    if branch_obj.branch_code:
+                        branch_aliases.add(branch_obj.branch_code)
+                query = query.filter(FeePayment.branch.in_(list(branch_aliases)))
+            else:
+                query = query.filter(FeePayment.branch == target_branch)
 
         if target_student_id:
             try:
