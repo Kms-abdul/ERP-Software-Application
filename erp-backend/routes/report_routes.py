@@ -22,6 +22,8 @@ def consolidate_receipts(payments):
                 "receipt_no": p.receipt_no,
                 "student_name": (p.student.first_name if p.student else "Unknown") + " " + (p.student.last_name if p.student and p.student.last_name else ""),
                 "admission_no": p.student.admission_no if p.student else "",
+                "student_id": p.student_id,
+                "academic_year": p.academic_year,
                 "class": p.class_name,
                 "section": p.section,
                 "branch": p.branch,
@@ -725,22 +727,35 @@ def get_receipt_data(current_user, receipt_no):
         # But instructions say "Receipts must be fetched by receipt_no + branch + academic_year."
         query = query.filter_by(academic_year=h_year)
 
+        target_student_id = request.args.get("student_id")
+
         # Strict Branch Logic
         if has_global_branch_access(current_user):
-            target_branch = request.headers.get("X-Branch", "All")
+            target_branch = request.args.get("branch") or request.headers.get("X-Branch", "All")
         else:
              target_branch = current_user.branch
-             if not target_branch or target_branch in ['All', 'AllBranches']:
+             if not target_branch or target_branch in ['All', 'AllBranches', 'All Locations']:
                   return jsonify({"error": "Unauthorized"}), 403
 
-        if target_branch and target_branch not in ['All', 'AllBranches']:
-            query = query.filter_by(branch=target_branch)
+        if target_branch and target_branch not in ['All', 'AllBranches', 'All Locations', 'all', 'all branches']:
+            clean_b = target_branch.replace("MS HifzAcademy", "").replace("MS Education Academy", "").strip()
+            query = query.filter(
+                or_(
+                    FeePayment.branch == target_branch,
+                    FeePayment.branch == clean_b,
+                    FeePayment.branch == f"MS HifzAcademy {clean_b}",
+                    FeePayment.branch.ilike(f"%{clean_b}%")
+                )
+            )
+
+        if target_student_id:
+            try:
+                query = query.filter(FeePayment.student_id == int(target_student_id))
+            except (ValueError, TypeError):
+                pass
             
         payments = query.all()
         
-        if not payments:
-            return jsonify({"error": "Receipt not found"}), 404
-            
         if not payments:
             return jsonify({"error": "Receipt not found"}), 404
             
@@ -782,6 +797,11 @@ def get_receipt_data(current_user, receipt_no):
             "paymentDate": first.payment_date.isoformat(),
             "paymentMode": first.payment_mode,
             "paymentNote": first.note,
+            "transactionId": first.TransactionDetails or "",
+            "transaction_id": first.TransactionDetails or "",
+            "chequeNo": first.cheque_no or "",
+            "bankName": first.bank_name or "",
+            "chequeDate": first.cheque_date.isoformat() if first.cheque_date else None,
             "items": items,
             "amount": total_gross, # Gross
             "concession": total_concession,

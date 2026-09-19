@@ -44,6 +44,10 @@ class AuditMixin(object):
     created_at = db.Column(db.DateTime, default=get_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=get_now, onupdate=get_now, nullable=False)
 
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
     @declared_attr
     def created_by(cls):
         return db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=True)

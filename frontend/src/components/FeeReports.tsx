@@ -22,13 +22,20 @@ const FeeReports: React.FC<FeeReportsProps> = ({ singleDailyMode }) => {
     const [loadingReceipt, setLoadingReceipt] = useState(false);
     const [error, setError] = useState('');
 
-    const handleViewReceipt = async (receiptNo: string) => {
+    const handleViewReceipt = async (receiptNo: string, branch?: string, studentIdParam?: number) => {
         try {
             setLoadingReceipt(true);
             setError('');
 
             // 1. Fetch the raw receipt data (flat list of payments)
-            const res = await api.get(`/reports/fees/receipt/${receiptNo}`);
+            const params: any = {};
+            if (branch && branch !== 'All' && branch !== 'All Branches' && branch !== 'All Locations') {
+                params.branch = branch;
+            }
+            if (studentIdParam) {
+                params.student_id = studentIdParam;
+            }
+            const res = await api.get(`/reports/fees/receipt/${receiptNo}`, { params });
             const payments = res.data.items || [];
 
             if (payments.length === 0) {
