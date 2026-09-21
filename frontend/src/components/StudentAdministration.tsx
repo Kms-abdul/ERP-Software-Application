@@ -17,6 +17,7 @@ import ChangeSection from './ChangeSection';
 import { Student } from '../types';
 import api from '../api';
 import { formatReportBranch } from '../utils/branchHelper';
+import HifzAcademylogo from '../images/HifzAcademylogo.png';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -430,7 +431,7 @@ const StudentList: React.FC<{ onView: any; onEdit?: any }> =
                          </head>
                          <body>
                              <div class="header">
-                                <img src="https://www.mshifzacademy.com/assets/images/ms-logo.jpg" style="max-width: 300px; height: auto; margin-bottom: 10px;" />
+                                <img src="${HifzAcademylogo}" style="max-width: 300px; height: auto; margin-bottom: 10px;" />
                                 <h1 style="margin: 5px 0; font-size: 24px; color: #4c1d95;">${formatReportBranch(s.branch)}</h1>
                                 <p style="font-size: 16px; color: #374151; font-weight: bold;">Student Profile Report</p>
                              </div>

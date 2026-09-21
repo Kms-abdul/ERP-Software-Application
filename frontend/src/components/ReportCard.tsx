@@ -8,6 +8,7 @@ interface ReportCardProps {
   data: ProgressReportData;
 }
 import logo1 from '../images/logo1.png';
+import HifzAcademylogo from '../images/HifzAcademylogo.png';
 import { formatReportBranch } from '../utils/branchHelper';
 
 const HIFZ_TARGET_X_TICKS = Array.from({ length: 11 }, (_, i) => i * 3);
@@ -202,25 +203,20 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
       </style>
 
       {/* Header */}
-      <div className="flex justify-between items-center mb-0">
-        <div className="logo-container" style={{ width: 'auto', height: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+      <div className="flex justify-between items-center mb-1 px-1">
+        <div className="logo-container" style={{ width: 'auto', height: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
           <img
-            src="https://mshifzacademy.com/assets/images/ms-logo.jpg"
+            src={HifzAcademylogo}
             alt="MS HIFZ Academy Logo"
-            referrerPolicy="no-referrer"
-            style={{ maxWidth: '250px', maxHeight: '80px', width: 'auto', height: '80px', objectFit: 'contain' }}
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-              console.log('Logo 2 failed to load');
-            }}
+            style={{ maxWidth: '280px', maxHeight: '65px', width: 'auto', height: 'auto', objectFit: 'contain' }}
           />
         </div>
-        <div className="logo-container" style={{ width: 'auto', height: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', marginRight: '20px' }}>
+        <div className="logo-container" style={{ width: 'auto', height: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginRight: '10px' }}>
           <img
             src={logo1}
             alt="MS Education Academy Logo"
             referrerPolicy="no-referrer"
-            style={{ maxWidth: '100px', maxHeight: '50px', width: 'auto', height: '80px', objectFit: 'contain' }}
+            style={{ maxWidth: '90px', maxHeight: '55px', width: 'auto', height: 'auto', objectFit: 'contain' }}
             onError={(e) => {
               e.currentTarget.style.display = 'none';
               console.log('Logo 1 failed to load');
