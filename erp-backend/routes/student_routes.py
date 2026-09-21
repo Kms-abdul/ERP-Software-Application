@@ -38,16 +38,25 @@ logger = logging.getLogger(__name__)
 bp = Blueprint('student_routes', __name__)
 
 
-def _parse_date_safe(date_val):
-    if not date_val or str(date_val).strip().lower() in ['none', 'null', '', 'undefined']:
-        return None
-    val = str(date_val).strip().split('T')[0]
+def _parse_and_validate_date(date_val):
+    """
+    Returns (parsed_date, is_valid).
+    - If date_val is None, empty string "", or "null"/"none": returns (None, True) to indicate supported null-like value.
+    - If date_val parses successfully: returns (date_obj, True).
+    - If date_val is non-empty but fails to parse: returns (None, False).
+    """
+    if date_val is None:
+        return None, True
+    val_str = str(date_val).strip()
+    if val_str == "" or val_str.lower() in ['none', 'null', 'undefined']:
+        return None, True
+    val = val_str.split('T')[0]
     for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
         try:
-            return datetime.strptime(val, fmt).date()
+            return datetime.strptime(val, fmt).date(), True
         except ValueError:
             pass
-    return None
+    return None, False
 
 
 def _deactivate_student_year_data(student_id, academic_year, demoted_by_user_id=None):
@@ -228,16 +237,17 @@ def get_students(current_user):
                  q = q.filter_by(section=section)
 
         if search:
-            like = f"%{search}%"
-            # Search is always on Student Profile fields
+            search_val = search.strip()
+            like = f"%{search_val}%"
+            # Search is always on Student Profile fields (case-insensitive)
             q = q.filter(
-                (Student.first_name.like(like)) |
-                (Student.StudentMiddleName.like(like)) |
-                (Student.last_name.like(like)) |
-                (Student.admission_no.like(like)) |
-                (Student.Fatherfirstname.like(like)) |
-                (Student.phone.like(like)) |
-                (Student.FatherPhone.like(like))
+                (Student.first_name.ilike(like)) |
+                (Student.StudentMiddleName.ilike(like)) |
+                (Student.last_name.ilike(like)) |
+                (Student.admission_no.ilike(like)) |
+                (Student.Fatherfirstname.ilike(like)) |
+                (Student.phone.ilike(like)) |
+                (Student.FatherPhone.ilike(like))
             )
         
         # Status Filtering
@@ -516,17 +526,24 @@ def update_student(current_user, student_id):
                 
                 setattr(student, backend_attr, value)
 
-        # -------- DATE FIELDS (SAFE PARSING) --------
+        # -------- DATE FIELDS (VALIDATION & PARSING) --------
         if "dob" in data:
-            student.dob = _parse_date_safe(data["dob"])
+            parsed_dob, is_valid = _parse_and_validate_date(data["dob"])
+            if not is_valid:
+                return jsonify({"error": f"Invalid date format for dob: '{data['dob']}'. Expected YYYY-MM-DD"}), 400
+            student.dob = parsed_dob
 
         if "Doa" in data:
-            student.Doa = _parse_date_safe(data["Doa"])
+            parsed_doa, is_valid = _parse_and_validate_date(data["Doa"])
+            if not is_valid:
+                return jsonify({"error": f"Invalid date format for Doa: '{data['Doa']}'. Expected YYYY-MM-DD"}), 400
+            student.Doa = parsed_doa
 
         if "admission_date" in data:
-            parsed_adm = _parse_date_safe(data["admission_date"])
-            if parsed_adm:
-                student.admission_date = parsed_adm
+            parsed_adm, is_valid = _parse_and_validate_date(data["admission_date"])
+            if not is_valid:
+                return jsonify({"error": f"Invalid date format for admission_date: '{data['admission_date']}'. Expected YYYY-MM-DD"}), 400
+            student.admission_date = parsed_adm
 
         # -------- ADDRESS HANDLING --------
         if data.get("presentAddress"):
@@ -545,7 +562,9 @@ def update_student(current_user, student_id):
                 
             # Save inactivation details
             if data.get("inactivation_date"):
-                parsed_inact = _parse_date_safe(data["inactivation_date"])
+                parsed_inact, is_valid = _parse_and_validate_date(data["inactivation_date"])
+                if not is_valid:
+                    return jsonify({"error": f"Invalid date format for inactivation_date: '{data['inactivation_date']}'. Expected YYYY-MM-DD"}), 400
                 if parsed_inact:
                     student.inactivated_date = datetime.combine(parsed_inact, datetime.min.time())
             
@@ -676,11 +695,17 @@ def create_student(current_user):
         s.last_name = data.get("last_name")
         s.gender = data.get("gender")
         
-        if data.get('dob'):
-            s.dob = _parse_date_safe(data['dob'])
+        if "dob" in data and data.get('dob'):
+            parsed_dob, is_valid = _parse_and_validate_date(data['dob'])
+            if not is_valid:
+                return jsonify({"error": f"Invalid date format for dob: '{data['dob']}'. Expected YYYY-MM-DD"}), 400
+            s.dob = parsed_dob
                 
-        if data.get('Doa'):
-            s.Doa = _parse_date_safe(data['Doa'])
+        if "Doa" in data and data.get('Doa'):
+            parsed_doa, is_valid = _parse_and_validate_date(data['Doa'])
+            if not is_valid:
+                return jsonify({"error": f"Invalid date format for Doa: '{data['Doa']}'. Expected YYYY-MM-DD"}), 400
+            s.Doa = parsed_doa
 
         s.clazz = data.get("class")
         s.section = data.get("section")
@@ -688,10 +713,11 @@ def create_student(current_user):
         if data.get("Roll_Number"):
             s.Roll_Number = int(data.get("Roll_Number"))
             
-        if data.get('admission_date'):
-            parsed_adm = _parse_date_safe(data['admission_date'])
-            if parsed_adm:
-                s.admission_date = parsed_adm
+        if "admission_date" in data and data.get('admission_date'):
+            parsed_adm, is_valid = _parse_and_validate_date(data['admission_date'])
+            if not is_valid:
+                return jsonify({"error": f"Invalid date format for admission_date: '{data['admission_date']}'. Expected YYYY-MM-DD"}), 400
+            s.admission_date = parsed_adm
                 
         s.status = data.get("status", "Active")
         s.branch = data.get("branch")
