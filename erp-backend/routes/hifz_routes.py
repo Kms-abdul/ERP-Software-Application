@@ -200,19 +200,40 @@ def get_graph_data_for_student(student_id):
     if not student:
         return {"expected": [], "actual": []}
         
-    cat_str = "Hifz + Nazira" if student.AdmissionCategory == "Hifz+Nazira" else student.AdmissionCategory
+    category = (student.AdmissionCategory or "").strip()
+    is_nazira = any(k in category.lower() for k in ["nazir", "naizr", "+"])
     
-    # Get program target
-    program = HifzProgram.query.filter_by(program_name=cat_str, is_active=True).first()
+    # Match Hifz+Nazira or Hifz program
+    program = None
+    if is_nazira:
+        program = HifzProgram.query.filter(
+            HifzProgram.is_active == True,
+            (HifzProgram.program_name == "Hifz+Nazira") | 
+            (HifzProgram.program_name == "Hifz + Nazira") |
+            (HifzProgram.program_name == "Hifz Nazira") |
+            (HifzProgram.program_name.ilike("%nazir%")) |
+            (HifzProgram.program_name.ilike("%naizr%"))
+        ).first()
+    else:
+        program = HifzProgram.query.filter(
+            HifzProgram.is_active == True,
+            (HifzProgram.program_name == "Hifz") |
+            (HifzProgram.program_name.ilike("Hifz%"))
+        ).first()
+
+    if not program:
+        program = HifzProgram.query.filter_by(program_name=category, is_active=True).first()
+
+    total_months = program.total_months if (program and program.total_months > 0) else (30 if is_nazira else 24)
+    total_paras = program.total_paras if (program and program.total_paras > 0) else 30
     
     expected = []
-    if program and program.total_months > 0:
-        pace = program.total_paras / program.total_months
-        for m in range(0, program.total_months + 1):
-            expected.append({
-                "month": m,
-                "paras": min(round(pace * m, 1), program.total_paras)
-            })
+    pace = total_paras / total_months
+    for m in range(0, total_months + 1):
+        expected.append({
+            "month": m,
+            "paras": min(round(pace * m, 1), total_paras)
+        })
             
     # Get actual progress
     progress_records = StudentHifzProgress.query.filter_by(student_id=student_id).order_by(StudentHifzProgress.completed_months).all()

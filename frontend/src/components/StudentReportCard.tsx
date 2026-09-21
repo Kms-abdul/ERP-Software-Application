@@ -91,6 +91,12 @@ const StudentReportCard: React.FC = () => {
           display: block; 
           overflow: visible !important;
         }
+
+        .recharts-responsive-container,
+        .recharts-wrapper {
+          max-width: 100% !important;
+          width: 100% !important;
+        }
       }
     `;
     document.head.appendChild(style);

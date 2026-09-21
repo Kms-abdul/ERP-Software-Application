@@ -8,11 +8,12 @@ interface ReportCardProps {
   data: ProgressReportData;
 }
 import logo1 from '../images/logo1.png';
+import HifzAcademylogo from '../images/HifzAcademylogo.png';
 import { formatReportBranch } from '../utils/branchHelper';
 
 const HIFZ_TARGET_X_TICKS = Array.from({ length: 11 }, (_, i) => i * 3);
-const HIFZ_TARGET_Y_TICKS = [5, 10, 15, 20, 25, 30];
-const HIFZ_CHART_HEIGHT = 220;
+const HIFZ_TARGET_Y_TICKS = [0, 5, 10, 15, 20, 25, 30];
+const HIFZ_CHART_HEIGHT = 190;
 
 function useMeasuredChartSize(containerRef: React.RefObject<HTMLDivElement | null>) {
   const [size, setSize] = React.useState({ width: 0, height: HIFZ_CHART_HEIGHT });
@@ -188,12 +189,23 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
             [dir="rtl"] {
               font-family: 'Noto Nastaliq Urdu', 'Noto Naskh Arabic', 'Noto Sans Arabic', 'Arial Unicode MS', 'Simplified Arabic', 'Traditional Arabic', 'Arial', sans-serif !important;
             }
-            .hifz-target-chart .hifz-target-chart-plot {
-              height: 220px !important;
-              min-height: 220px !important;
+            .hifz-target-chart {
+              overflow: hidden !important;
             }
+            .hifz-target-chart .hifz-target-chart-plot {
+              height: 190px !important;
+              min-height: 190px !important;
+              width: 100% !important;
+              max-width: 100% !important;
+            }
+            .hifz-target-chart .recharts-wrapper {
+              width: 100% !important;
+              max-width: 100% !important;
+            }
+            .hifz-target-chart svg.recharts-surface,
             .hifz-target-chart svg {
-              max-width: none !important;
+              width: 100% !important;
+              max-width: 100% !important;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
@@ -202,25 +214,20 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
       </style>
 
       {/* Header */}
-      <div className="flex justify-between items-center mb-0">
-        <div className="logo-container" style={{ width: 'auto', height: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+      <div className="flex justify-between items-center mb-1 px-1">
+        <div className="logo-container" style={{ width: 'auto', height: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
           <img
-            src="https://mshifzacademy.com/assets/images/ms-logo.jpg"
+            src={HifzAcademylogo}
             alt="MS HIFZ Academy Logo"
-            referrerPolicy="no-referrer"
-            style={{ maxWidth: '250px', maxHeight: '80px', width: 'auto', height: '80px', objectFit: 'contain' }}
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-              console.log('Logo 2 failed to load');
-            }}
+            style={{ maxWidth: '280px', maxHeight: '65px', width: 'auto', height: 'auto', objectFit: 'contain' }}
           />
         </div>
-        <div className="logo-container" style={{ width: 'auto', height: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', marginRight: '20px' }}>
+        <div className="logo-container" style={{ width: 'auto', height: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginRight: '10px' }}>
           <img
             src={logo1}
             alt="MS Education Academy Logo"
             referrerPolicy="no-referrer"
-            style={{ maxWidth: '100px', maxHeight: '50px', width: 'auto', height: '80px', objectFit: 'contain' }}
+            style={{ maxWidth: '90px', maxHeight: '55px', width: 'auto', height: 'auto', objectFit: 'contain' }}
             onError={(e) => {
               e.currentTarget.style.display = 'none';
               console.log('Logo 1 failed to load');
@@ -530,15 +537,15 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
 
         <div className="border border-indigo-900 rounded-lg overflow-hidden flex flex-col shadow-sm min-w-0 hifz-target-chart">
           <div className="bg-[#1a5276] text-white px-4 py-2 text-sm font-semibold">HIFZ TARGET LEVEL</div>
-          <div className="px-3 py-4 min-w-0">
+          <div className="p-2 min-w-0 flex-1 flex flex-col justify-center">
             {data.hifzTargetLevel && data.hifzTargetLevel.length > 0 ? (
-              <div ref={hifzChartRef} className="hifz-target-chart-plot h-[120px] w-full min-w-0">
+              <div ref={hifzChartRef} className="hifz-target-chart-plot h-[190px] w-full min-w-0">
                 {hifzChartSize.width > 0 && (
                   <LineChart
                     width={hifzChartSize.width}
                     height={hifzChartSize.height}
                     data={data.hifzTargetLevel}
-                    margin={{ top: 4, right: 32, left: 4, bottom: 50 }}
+                    margin={{ top: 8, right: 28, left: 2, bottom: 20 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                     <XAxis
@@ -547,30 +554,48 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
                       domain={[0, 30]}
                       ticks={HIFZ_TARGET_X_TICKS}
                       allowDecimals={false}
-                      padding={{ left: 0, right: 24 }}
+                      padding={{ left: 8, right: 8 }}
                       tickMargin={4}
-                      label={{ value: 'MONTHS', position: 'bottom', offset: 0, fontSize: 10 }}
-                      fontSize={10}
+                      label={{ value: 'MONTHS', position: 'insideBottom', offset: -4, fontSize: 9 }}
+                      fontSize={9}
                     />
                     <YAxis
-                      width={42}
+                      width={38}
                       domain={[0, 30]}
-                      ticks={[0, 5, 10, 15, 20, 25, 30]}
+                      ticks={HIFZ_TARGET_Y_TICKS}
                       interval={0}
                       allowDecimals={false}
-                      tickMargin={4}
-                      label={{ value: 'PARAS', angle: -90, position: 'insideLeft', fontSize: 10 }}
-                      fontSize={10}
+                      tickMargin={2}
+                      label={{ value: 'PARAS', angle: -90, position: 'insideLeft', offset: 8, fontSize: 9, style: { textAnchor: 'middle' } }}
+                      fontSize={9}
                     />
                     <Tooltip />
-                    <Legend iconType="circle" verticalAlign="bottom" wrapperStyle={{ fontSize: '10px', paddingTop: 20 }} />
-                    <Line type="monotone" dataKey="targetParas" name={data.student?.admissionCategory === "Hifz" ? "Hifz" : "Hifz + Nazira"} stroke={data.student?.admissionCategory === "Hifz" ? "#22c55e" : "#8b5cf6"} strokeWidth={2} dot={{ r: 2 }} isAnimationActive={false} />
-                    <Line type="monotone" dataKey="actualParas" name="Student Performance" stroke="#ef4444" strokeWidth={2} dot={{ r: 2 }} connectNulls isAnimationActive={false} />
+                    <Legend iconType="circle" verticalAlign="bottom" wrapperStyle={{ fontSize: '10px', paddingTop: 6 }} />
+                    <Line
+                      type="monotone"
+                      dataKey="targetParas"
+                      name={data.student?.admissionCategory?.trim().toLowerCase() === "hifz" ? "Hifz" : "Hifz + Nazira"}
+                      stroke={data.student?.admissionCategory?.trim().toLowerCase() === "hifz" ? "#22c55e" : "#8b5cf6"}
+                      strokeWidth={2}
+                      dot={{ r: 2 }}
+                      connectNulls
+                      isAnimationActive={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="actualParas"
+                      name="Student Performance"
+                      stroke="#ef4444"
+                      strokeWidth={2}
+                      dot={{ r: 2 }}
+                      connectNulls
+                      isAnimationActive={false}
+                    />
                   </LineChart>
                 )}
               </div>
             ) : (
-              <div className="flex items-center justify-center h-[220px] text-gray-400">
+              <div className="flex items-center justify-center h-[190px] text-gray-400">
                 <span>No target data available</span>
               </div>
             )}

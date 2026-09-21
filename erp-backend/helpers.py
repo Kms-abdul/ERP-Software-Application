@@ -334,7 +334,20 @@ def student_to_dict(s):
     name_parts = [s.first_name, s.StudentMiddleName, s.last_name]
     name = " ".join([p for p in name_parts if p])
     
-    photo_url = f"{request.url_root}{s.photopath.replace(os.sep, '/')}" if s.photopath else None
+    photo_url = None
+    if s.photopath:
+        clean_path = s.photopath.replace(os.sep, '/').lstrip('/')
+        try:
+            from flask import url_for
+            if clean_path.startswith("Media/"):
+                media_rel = clean_path[6:]
+                photo_url = url_for('serve_media', filename=media_rel, _external=True)
+            else:
+                script_root = request.script_root.rstrip('/')
+                photo_url = f"{request.scheme}://{request.host}{script_root}/{clean_path}"
+        except Exception:
+            script_root = getattr(request, 'script_root', '').rstrip('/')
+            photo_url = f"{request.scheme}://{request.host}{script_root}/{clean_path}"
 
     return {
         "student_id": s.student_id,
