@@ -23,6 +23,7 @@ from helpers import (
 )
 from services.sequence_service import SequenceService
 from sqlalchemy import or_, and_, func
+from datetime import datetime, date
 import io
 import csv
 import pandas as pd
@@ -35,6 +36,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('student_routes', __name__)
+
+
+def _parse_date_safe(date_val):
+    if not date_val or str(date_val).strip().lower() in ['none', 'null', '', 'undefined']:
+        return None
+    val = str(date_val).strip().split('T')[0]
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(val, fmt).date()
+        except ValueError:
+            pass
+    return None
 
 
 def _deactivate_student_year_data(student_id, academic_year, demoted_by_user_id=None):
@@ -504,17 +517,16 @@ def update_student(current_user, student_id):
                 setattr(student, backend_attr, value)
 
         # -------- DATE FIELDS (SAFE PARSING) --------
-        if data.get("dob"):
-            with contextlib.suppress(ValueError):
-                student.dob = datetime.strptime(data["dob"], "%Y-%m-%d").date()
+        if "dob" in data:
+            student.dob = _parse_date_safe(data["dob"])
 
-        if data.get("Doa"):
-            with contextlib.suppress(ValueError):
-                student.Doa = datetime.strptime(data["Doa"], "%Y-%m-%d").date()
+        if "Doa" in data:
+            student.Doa = _parse_date_safe(data["Doa"])
 
-        if data.get("admission_date"):
-            with contextlib.suppress(ValueError):
-                student.admission_date = datetime.strptime(data["admission_date"], "%Y-%m-%d").date()
+        if "admission_date" in data:
+            parsed_adm = _parse_date_safe(data["admission_date"])
+            if parsed_adm:
+                student.admission_date = parsed_adm
 
         # -------- ADDRESS HANDLING --------
         if data.get("presentAddress"):
@@ -533,8 +545,9 @@ def update_student(current_user, student_id):
                 
             # Save inactivation details
             if data.get("inactivation_date"):
-                with contextlib.suppress(ValueError):
-                    student.inactivated_date = datetime.strptime(data["inactivation_date"], "%Y-%m-%d")
+                parsed_inact = _parse_date_safe(data["inactivation_date"])
+                if parsed_inact:
+                    student.inactivated_date = datetime.combine(parsed_inact, datetime.min.time())
             
             if "inactivation_reason" in data:
                 student.inactivate_reason = data.get("inactivation_reason")
@@ -664,12 +677,10 @@ def create_student(current_user):
         s.gender = data.get("gender")
         
         if data.get('dob'):
-            with contextlib.suppress(Exception):
-                s.dob = datetime.strptime(data['dob'], '%Y-%m-%d').date()
+            s.dob = _parse_date_safe(data['dob'])
                 
         if data.get('Doa'):
-            with contextlib.suppress(Exception):
-                s.Doa = datetime.strptime(data['Doa'], '%Y-%m-%d').date()
+            s.Doa = _parse_date_safe(data['Doa'])
 
         s.clazz = data.get("class")
         s.section = data.get("section")
@@ -678,8 +689,9 @@ def create_student(current_user):
             s.Roll_Number = int(data.get("Roll_Number"))
             
         if data.get('admission_date'):
-            with contextlib.suppress(Exception):
-                s.admission_date = datetime.strptime(data['admission_date'], '%Y-%m-%d').date()
+            parsed_adm = _parse_date_safe(data['admission_date'])
+            if parsed_adm:
+                s.admission_date = parsed_adm
                 
         s.status = data.get("status", "Active")
         s.branch = data.get("branch")

@@ -769,7 +769,7 @@ const CreateStudent: React.FC<CreateStudentProps> = ({
       SamagraId: formData.SamagraId,
       ChildId: formData.ChildId,
       PEN: formData.PEN,
-      permanentCity: formData.permanentCity_id,
+      permanentCity: formData.permanentCity_ui || formData.permanentCity || null,
       previousSchoolName: formData.previousSchoolName,
       primaryIncomePerYear: formData.primaryIncomePerYear ? Number(formData.primaryIncomePerYear) : null,
       secondaryIncomePerYear: formData.secondaryIncomePerYear ? Number(formData.secondaryIncomePerYear) : null,

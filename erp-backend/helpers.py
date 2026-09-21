@@ -334,7 +334,13 @@ def student_to_dict(s):
     name_parts = [s.first_name, s.StudentMiddleName, s.last_name]
     name = " ".join([p for p in name_parts if p])
     
-    photo_url = f"{request.url_root}{s.photopath.replace(os.sep, '/')}" if s.photopath else None
+    if s.photopath:
+        clean_path = s.photopath.replace(os.sep, '/').lstrip('/')
+        proto = request.headers.get("X-Forwarded-Proto", request.scheme)
+        host = request.headers.get("X-Forwarded-Host", request.host)
+        photo_url = f"{proto}://{host}/{clean_path}"
+    else:
+        photo_url = None
 
     return {
         "student_id": s.student_id,
