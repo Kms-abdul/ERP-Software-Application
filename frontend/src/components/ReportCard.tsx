@@ -189,12 +189,23 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
             [dir="rtl"] {
               font-family: 'Noto Nastaliq Urdu', 'Noto Naskh Arabic', 'Noto Sans Arabic', 'Arial Unicode MS', 'Simplified Arabic', 'Traditional Arabic', 'Arial', sans-serif !important;
             }
+            .hifz-target-chart {
+              overflow: hidden !important;
+            }
             .hifz-target-chart .hifz-target-chart-plot {
               height: 190px !important;
               min-height: 190px !important;
+              width: 100% !important;
+              max-width: 100% !important;
             }
+            .hifz-target-chart .recharts-wrapper {
+              width: 100% !important;
+              max-width: 100% !important;
+            }
+            .hifz-target-chart svg.recharts-surface,
             .hifz-target-chart svg {
-              max-width: none !important;
+              width: 100% !important;
+              max-width: 100% !important;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
@@ -534,7 +545,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
                     width={hifzChartSize.width}
                     height={hifzChartSize.height}
                     data={data.hifzTargetLevel}
-                    margin={{ top: 8, right: 16, left: 2, bottom: 20 }}
+                    margin={{ top: 8, right: 28, left: 2, bottom: 20 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                     <XAxis
@@ -543,7 +554,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
                       domain={[0, 30]}
                       ticks={HIFZ_TARGET_X_TICKS}
                       allowDecimals={false}
-                      padding={{ left: 6, right: 6 }}
+                      padding={{ left: 8, right: 8 }}
                       tickMargin={4}
                       label={{ value: 'MONTHS', position: 'insideBottom', offset: -4, fontSize: 9 }}
                       fontSize={9}
