@@ -479,6 +479,7 @@ const downloadExcelReport = (receipts: any[], filename: string) => {
         Paid: r.amount_paid || r.amount,
         Due: r.due_amount || 0,
         Mode: r.mode,
+        Remarks: r.note || '-',
         TransactionID: r.mode === 'Cheque' ? `Chq: ${r.cheque_no || '-'} | ${r.bank_name || '-'} | ${r.cheque_date || '-'}` : (r.transaction_id || '-'),
         Date: formatDateDDMMYYYY(r.date),
         Time: r.time,
