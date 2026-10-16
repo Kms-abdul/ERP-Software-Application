@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api';
-import { ChevronDownIcon, PrinterIcon, EyeIcon } from './icons';
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
@@ -3007,7 +3006,7 @@ export const SearchStudentReport: React.FC<ReportProps> = ({ onViewReceipt }) =>
 // --------------------------------------------------------------------------
 // Consolidate Report
 // --------------------------------------------------------------------------
-export const ConsolidateReport: React.FC = () => {
+export const ConsolidateReport: React.FC<ReportProps> = ({ onViewReceipt }) => {
     const today = new Date().toISOString().split('T')[0];
     const [startDate, setStartDate] = useState<string>(today);
     const [endDate, setEndDate] = useState<string>(today);
@@ -3091,53 +3090,18 @@ export const ConsolidateReport: React.FC = () => {
         }
     };
 
-    const lineItems: any[] = rawData?.line_items || [];
-    const totalPages = Math.ceil(lineItems.length / rowsPerPage);
-    const currentItems = lineItems.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+    const receipts: any[] = rawData?.receipts || [];
+    const totalPages = Math.ceil(receipts.length / rowsPerPage);
+    const currentItems = receipts.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
-    const downloadConsolidatedExcel = () => {
-        if (!lineItems.length) return;
-        const rows = lineItems.map((r: any, idx: number) => ({
-            'S.No': idx + 1,
-            'Student': r.student_name,
-            'AdmissionNo': r.admission_no,
-            'Class': `${r.class} ${r.section || ''}`.trim(),
-            'Branch': formatReportBranch(r.branch),
-            'AcademicYear': r.academic_year,
-            'ReceiptNo': r.receipt_no,
-            'FeeType': r.fee_type,
-            'Installment': r.installment_name,
-            'TotalAmount': r.gross_amount,
-            'Concession': r.concession,
-            'Payable': r.net_payable,
-            'Paid': r.amount_paid,
-            'Due': r.due_amount,
-            'Mode': r.mode,
-            'Remarks': r.note || '-',
-            'TransactionID': r.transaction_id || '-',
-            'Date': formatDateDDMMYYYY(r.date),
-            'Time': r.time,
-            'CollectedBy': r.collected_by
-        }));
-
-        const worksheet = XLSX.utils.json_to_sheet(rows);
-        // Auto-width columns
-        const colWidths = Object.keys(rows[0]).map(key => ({
-            wch: Math.max(key.length, ...rows.map((r: any) => String(r[key] ?? '').length)) + 2
-        }));
-        worksheet['!cols'] = colWidths;
-
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Consolidated Report');
-        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        saveAs(blob, `Consolidated_Fee_Report_${startDate}_to_${endDate}.xlsx`);
+    const handleDownloadExcel = () => {
+        if (!receipts.length) return;
+        downloadExcelReport(receipts, `Consolidated_Fee_Report_${startDate}_to_${endDate}`);
     };
 
     const totalPaid = rawData?.total_paid || 0;
     const totalConcession = rawData?.total_concession || 0;
     const totalDue = rawData?.total_due || 0;
-    const totalRecords = rawData?.total_records || 0;
 
     return (
         <div className="space-y-4 font-sans">
@@ -3279,9 +3243,9 @@ export const ConsolidateReport: React.FC = () => {
                     )}
                 </button>
                 <div className="flex-grow" />
-                {lineItems.length > 0 && (
+                {receipts.length > 0 && (
                     <button
-                        onClick={downloadConsolidatedExcel}
+                        onClick={handleDownloadExcel}
                         className="bg-white border border-slate-200 text-green-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-50 flex items-center gap-2 shadow-sm transition-colors"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3300,9 +3264,9 @@ export const ConsolidateReport: React.FC = () => {
             {rawData && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 px-4 mb-4">
                     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-                        <p className="text-xs text-slate-500 font-medium mb-1">Total Records</p>
-                        <p className="text-2xl font-bold text-slate-800">{totalRecords.toLocaleString()}</p>
-                        <p className="text-xs text-slate-400 mt-1">Line items</p>
+                        <p className="text-xs text-slate-500 font-medium mb-1">Total Receipts</p>
+                        <p className="text-2xl font-bold text-slate-800">{receipts.length.toLocaleString()}</p>
+                        <p className="text-xs text-slate-400 mt-1">{rawData?.total_line_items || receipts.length} fee items</p>
                     </div>
                     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
                         <p className="text-xs text-slate-500 font-medium mb-1">Total Collected</p>
@@ -3322,94 +3286,112 @@ export const ConsolidateReport: React.FC = () => {
             {/* Table */}
             {rawData && (
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mx-4">
-                    {lineItems.length === 0 ? (
+                    {receipts.length === 0 ? (
                         <div className="text-center py-16 flex flex-col items-center justify-center">
                             <div className="bg-slate-50 p-4 rounded-full mb-4">
                                 <svg className="w-12 h-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
                             </div>
-                            <h3 className="text-lg font-semibold text-slate-700 mb-1">No records found</h3>
+                            <h3 className="text-lg font-semibold text-slate-700 mb-1">No receipts found</h3>
                             <p className="text-slate-500 text-sm">Try adjusting the date range or filters.</p>
                         </div>
                     ) : (
                         <>
                             <div className="overflow-x-auto">
                                 <table className="min-w-full text-xs">
-                                    <thead className="bg-violet-50 border-b border-violet-100 text-slate-700">
+                                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
                                         <tr>
-                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">S.No</th>
-                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Student</th>
-                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Adm No</th>
-                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Class</th>
-                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Branch</th>
-                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Acad. Year</th>
-                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Receipt No</th>
-                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Fee Type</th>
-                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Installment</th>
-                                            <th className="px-3 py-3 text-right font-semibold whitespace-nowrap">Tot. Amt</th>
-                                            <th className="px-3 py-3 text-right font-semibold whitespace-nowrap">Concession</th>
-                                            <th className="px-3 py-3 text-right font-semibold whitespace-nowrap">Payable</th>
-                                            <th className="px-3 py-3 text-right font-semibold whitespace-nowrap">Paid</th>
-                                            <th className="px-3 py-3 text-right font-semibold whitespace-nowrap">Due</th>
-                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Mode</th>
-                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Remarks</th>
-                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Trans ID</th>
-                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Date</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">S.No</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Student Name</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Adm No.</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Class</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Branch</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Acad. Year</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Rcpt No</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Fee Type</th>
+                                            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">Tot.Amt</th>
+                                            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">Concession</th>
+                                            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">Pay Amt</th>
+                                            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">Paid</th>
+                                            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">Due</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mode</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Trans ID</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Note</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Date/Time</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Taken By</th>
+                                            <th className="px-3 py-2 text-center font-semibold whitespace-nowrap">Action</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100">
+                                    <tbody className="divide-y divide-gray-100 text-xs">
                                         {currentItems.map((r: any, idx: number) => {
                                             const sNo = (currentPage - 1) * rowsPerPage + idx + 1;
-                                            // Color-code rows by receipt grouping using receipt_no alternation
-                                            const rowBg = idx % 2 === 0 ? '' : 'bg-slate-50/60';
                                             return (
-                                                <tr key={idx} className={`hover:bg-violet-50/40 transition-colors ${rowBg}`}>
-                                                    <td className="px-3 py-2 text-gray-400 font-medium">{sNo}</td>
+                                                <tr key={idx} className="hover:bg-violet-50/30 transition-colors h-[45px]">
+                                                    <td className="px-3 py-2 text-gray-500 font-medium">{sNo}</td>
                                                     <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{r.student_name}</td>
                                                     <td className="px-3 py-2 text-blue-600 whitespace-nowrap">{r.admission_no}</td>
                                                     <td className="px-3 py-2 whitespace-nowrap">{r.class}{r.section ? ` ${r.section}` : ''}</td>
-                                                    <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{formatReportBranch(r.branch)}</td>
-                                                    <td className="px-3 py-2">
+                                                    <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{formatReportBranch(r.branch)}</td>
+                                                    <td className="px-3 py-2 whitespace-nowrap">
                                                         <span className="bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full text-xs font-semibold">{r.academic_year}</span>
                                                     </td>
-                                                    <td className="px-3 py-2 font-mono text-gray-700 whitespace-nowrap">{r.receipt_no}</td>
-                                                    <td className="px-3 py-2 whitespace-nowrap">
-                                                        <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">{r.fee_type || '-'}</span>
+                                                    <td className="px-3 py-2 font-mono text-gray-800 whitespace-nowrap">{r.receipt_no}</td>
+                                                    <td className="px-3 py-2 max-w-[220px] truncate" title={r.fee_type_str}>
+                                                        <span className="text-gray-700">{r.fee_type_str || '-'}</span>
                                                     </td>
-                                                    <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{r.installment_name || '-'}</td>
-                                                    <td className="px-3 py-2 text-right font-medium">₹{r.gross_amount.toLocaleString('en-IN')}</td>
+                                                    <td className="px-3 py-2 text-right font-medium">₹{(r.gross_amount || 0).toLocaleString('en-IN')}</td>
                                                     <td className="px-3 py-2 text-right text-amber-600">{r.concession > 0 ? `₹${r.concession.toLocaleString('en-IN')}` : '-'}</td>
-                                                    <td className="px-3 py-2 text-right">₹{r.net_payable.toLocaleString('en-IN')}</td>
-                                                    <td className="px-3 py-2 text-right font-bold text-green-700">₹{r.amount_paid.toLocaleString('en-IN')}</td>
+                                                    <td className="px-3 py-2 text-right">₹{(r.net_payable || 0).toLocaleString('en-IN')}</td>
+                                                    <td className="px-3 py-2 text-right font-bold text-gray-800">₹{(r.amount_paid || 0).toLocaleString('en-IN')}</td>
                                                     <td className="px-3 py-2 text-right text-red-500">{r.due_amount > 0 ? `₹${r.due_amount.toLocaleString('en-IN')}` : '-'}</td>
                                                     <td className="px-3 py-2 whitespace-nowrap">{r.mode}</td>
-                                                    <td className="px-3 py-2 text-gray-500 max-w-[100px] truncate" title={r.note}>{r.note || '-'}</td>
-                                                    <td className="px-3 py-2 text-gray-500 max-w-[140px] truncate" title={r.transaction_id}>{r.transaction_id || '-'}</td>
-                                                    <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{formatDateDDMMYYYY(r.date)}</td>
+                                                    <td className="px-3 py-2 text-xs max-w-[150px]">
+                                                        {r.mode === 'Cheque' ? (
+                                                            <div className="truncate" title={`Chq: ${r.cheque_no || '-'} | ${r.bank_name || '-'} | ${r.cheque_date ? formatDateDDMMYYYY(r.cheque_date) : '-'}`}>
+                                                                <div>{r.cheque_no || '-'}</div>
+                                                                <div className="text-gray-400">{r.bank_name || '-'}</div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="truncate" title={r.transaction_id}>{r.transaction_id || '-'}</div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-xs text-gray-500 max-w-[120px] truncate" title={r.note}>{r.note || '-'}</td>
+                                                    <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
+                                                        {formatDateDDMMYYYY(r.date)} <br /> {r.time}
+                                                    </td>
+                                                    <td className="px-3 py-2 whitespace-nowrap text-gray-600">{r.collected_by || '-'}</td>
+                                                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                                                        <button
+                                                            onClick={() => onViewReceipt && onViewReceipt(r.receipt_no, r.branch, r.student_id)}
+                                                            className="text-white bg-violet-600 hover:bg-violet-700 px-3 py-1 rounded text-xs transition-colors"
+                                                        >
+                                                            View
+                                                        </button>
+                                                    </td>
                                                 </tr>
                                             );
                                         })}
                                     </tbody>
                                     {/* Footer totals */}
-                                    <tfoot className="bg-violet-50 border-t-2 border-violet-200 font-bold text-slate-800">
+                                    <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-bold text-slate-800 text-xs">
                                         <tr>
-                                            <td colSpan={9} className="px-3 py-3 text-right text-sm">Page Total ({currentItems.length} rows) →</td>
-                                            <td className="px-3 py-3 text-right text-sm">₹{currentItems.reduce((s: number, r: any) => s + r.gross_amount, 0).toLocaleString('en-IN')}</td>
-                                            <td className="px-3 py-3 text-right text-sm text-amber-600">₹{currentItems.reduce((s: number, r: any) => s + r.concession, 0).toLocaleString('en-IN')}</td>
-                                            <td className="px-3 py-3 text-right text-sm">₹{currentItems.reduce((s: number, r: any) => s + r.net_payable, 0).toLocaleString('en-IN')}</td>
-                                            <td className="px-3 py-3 text-right text-sm text-green-700">₹{currentItems.reduce((s: number, r: any) => s + r.amount_paid, 0).toLocaleString('en-IN')}</td>
-                                            <td className="px-3 py-3 text-right text-sm text-red-500">₹{currentItems.reduce((s: number, r: any) => s + r.due_amount, 0).toLocaleString('en-IN')}</td>
-                                            <td colSpan={4} />
+                                            <td colSpan={8} className="px-3 py-3 text-right">Page Total ({currentItems.length} receipts) →</td>
+                                            <td className="px-3 py-3 text-right">₹{currentItems.reduce((s: number, r: any) => s + (r.gross_amount || 0), 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-amber-600">₹{currentItems.reduce((s: number, r: any) => s + (r.concession || 0), 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right">₹{currentItems.reduce((s: number, r: any) => s + (r.net_payable || 0), 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-green-700">₹{currentItems.reduce((s: number, r: any) => s + (r.amount_paid || 0), 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-red-500">₹{currentItems.reduce((s: number, r: any) => s + (r.due_amount || 0), 0).toLocaleString('en-IN')}</td>
+                                            <td colSpan={6} />
                                         </tr>
-                                        <tr className="border-t border-violet-300">
-                                            <td colSpan={9} className="px-3 py-3 text-right text-sm">Grand Total ({lineItems.length} rows) →</td>
-                                            <td className="px-3 py-3 text-right text-sm">₹{lineItems.reduce((s: number, r: any) => s + r.gross_amount, 0).toLocaleString('en-IN')}</td>
-                                            <td className="px-3 py-3 text-right text-sm text-amber-600">₹{totalConcession.toLocaleString('en-IN')}</td>
-                                            <td className="px-3 py-3 text-right text-sm">₹{lineItems.reduce((s: number, r: any) => s + r.net_payable, 0).toLocaleString('en-IN')}</td>
-                                            <td className="px-3 py-3 text-right text-sm text-green-700">₹{totalPaid.toLocaleString('en-IN')}</td>
-                                            <td className="px-3 py-3 text-right text-sm text-red-500">₹{totalDue.toLocaleString('en-IN')}</td>
-                                            <td colSpan={4} />
+                                        <tr className="border-t border-slate-300">
+                                            <td colSpan={8} className="px-3 py-3 text-right">Grand Total ({receipts.length} receipts) →</td>
+                                            <td className="px-3 py-3 text-right">₹{receipts.reduce((s: number, r: any) => s + (r.gross_amount || 0), 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-amber-600">₹{totalConcession.toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right">₹{receipts.reduce((s: number, r: any) => s + (r.net_payable || 0), 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-green-700">₹{totalPaid.toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-red-500">₹{totalDue.toLocaleString('en-IN')}</td>
+                                            <td colSpan={6} />
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -3419,7 +3401,7 @@ export const ConsolidateReport: React.FC = () => {
                                 currentPage={currentPage}
                                 totalPages={totalPages}
                                 onPageChange={setCurrentPage}
-                                totalRecords={lineItems.length}
+                                totalRecords={receipts.length}
                                 perPage={rowsPerPage}
                             />
                         </>
@@ -3433,7 +3415,7 @@ export const ConsolidateReport: React.FC = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     <p className="text-lg font-medium text-slate-500">Select date range &amp; click Generate Report</p>
-                    <p className="text-sm mt-1">Each fee line item will appear as a separate row in the report.</p>
+                    <p className="text-sm mt-1">Receipts will appear with consolidated details, and export to Excel with individual line items.</p>
                 </div>
             )}
         </div>
