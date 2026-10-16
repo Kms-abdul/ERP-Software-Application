@@ -2954,6 +2954,442 @@ export const SearchStudentReport: React.FC<ReportProps> = ({ onViewReceipt }) =>
         </div>
     );
 };
+// --------------------------------------------------------------------------
+// Consolidate Report
+// --------------------------------------------------------------------------
+export const ConsolidateReport: React.FC = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const [startDate, setStartDate] = useState<string>(today);
+    const [endDate, setEndDate] = useState<string>(today);
+    const [availableYears, setAvailableYears] = useState<string[]>([]);
+    const [selectedYears, setSelectedYears] = useState<string[]>(['All']);
+    const [classList, setClassList] = useState<string[]>([]);
+    const [feeTypes, setFeeTypes] = useState<any[]>([]);
+    const [selectedClass, setSelectedClass] = useState('All');
+    const [selectedSection, setSelectedSection] = useState('All');
+    const [selectedFeeType, setSelectedFeeType] = useState('All');
+    const [selectedMode, setSelectedMode] = useState('All');
+    const [rawData, setRawData] = useState<any>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const rowsPerPage = 15;
+
+    const sections = useClassSections(selectedClass);
+    const paymentModes = ['All', 'Cash', 'UPI', 'Card', 'Bank Transfer', 'Cheque'];
+
+    useEffect(() => {
+        const init = async () => {
+            try {
+                const [resYears, resClasses, resTypes] = await Promise.all([
+                    api.get('/org/academic-years'),
+                    api.get('/classes'),
+                    api.get('/fee-types')
+                ]);
+                const years: string[] = (resYears.data.academic_years || resYears.data || []).map((y: any) => y.code || y.display_name || y);
+                setAvailableYears(years);
+
+                const classesData = resClasses.data.classes || [];
+                setClassList(['All', ...classesData.map((c: any) => c.class_name)]);
+
+                const allTypes = Array.isArray(resTypes.data) ? resTypes.data : resTypes.data.fee_types || [];
+                setFeeTypes(allTypes);
+            } catch (err) {
+                console.error('ConsolidateReport init error', err);
+            }
+        };
+        init();
+    }, []);
+
+    const toggleYear = (year: string) => {
+        if (year === 'All') {
+            setSelectedYears(['All']);
+            return;
+        }
+        setSelectedYears(prev => {
+            const withoutAll = prev.filter(y => y !== 'All');
+            if (withoutAll.includes(year)) {
+                const next = withoutAll.filter(y => y !== year);
+                return next.length === 0 ? ['All'] : next;
+            } else {
+                return [...withoutAll, year];
+            }
+        });
+    };
+
+    const fetchReport = async () => {
+        try {
+            setLoading(true);
+            setError('');
+            setCurrentPage(1);
+            const params = new URLSearchParams({
+                start_date: startDate,
+                end_date: endDate,
+                academic_years: selectedYears.includes('All') ? 'All' : selectedYears.join(','),
+                class: selectedClass,
+                section: selectedSection,
+                fee_type: selectedFeeType,
+                mode: selectedMode,
+            });
+            const res = await api.get(`/reports/fees/consolidated?${params.toString()}`);
+            setRawData(res.data);
+        } catch (err: any) {
+            setError(err.response?.data?.error || 'Failed to fetch consolidated report');
+            setRawData(null);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const lineItems: any[] = rawData?.line_items || [];
+    const totalPages = Math.ceil(lineItems.length / rowsPerPage);
+    const currentItems = lineItems.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+    const downloadConsolidatedExcel = () => {
+        if (!lineItems.length) return;
+        const rows = lineItems.map((r: any, idx: number) => ({
+            'S.No': idx + 1,
+            'Student': r.student_name,
+            'AdmissionNo': r.admission_no,
+            'Class': `${r.class} ${r.section || ''}`.trim(),
+            'Branch': formatReportBranch(r.branch),
+            'AcademicYear': r.academic_year,
+            'ReceiptNo': r.receipt_no,
+            'FeeType': r.fee_type,
+            'Installment': r.installment_name,
+            'TotalAmount': r.gross_amount,
+            'Concession': r.concession,
+            'Payable': r.net_payable,
+            'Paid': r.amount_paid,
+            'Due': r.due_amount,
+            'Mode': r.mode,
+            'Remarks': r.note || '-',
+            'TransactionID': r.transaction_id || '-',
+            'Date': formatDateDDMMYYYY(r.date),
+            'Time': r.time,
+            'CollectedBy': r.collected_by
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(rows);
+        // Auto-width columns
+        const colWidths = Object.keys(rows[0]).map(key => ({
+            wch: Math.max(key.length, ...rows.map((r: any) => String(r[key] ?? '').length)) + 2
+        }));
+        worksheet['!cols'] = colWidths;
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Consolidated Report');
+        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        saveAs(blob, `Consolidated_Fee_Report_${startDate}_to_${endDate}.xlsx`);
+    };
+
+    const totalPaid = rawData?.total_paid || 0;
+    const totalConcession = rawData?.total_concession || 0;
+    const totalDue = rawData?.total_due || 0;
+    const totalRecords = rawData?.total_records || 0;
+
+    return (
+        <div className="space-y-4 font-sans">
+            {/* Filter Container */}
+            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 mb-6 shadow-sm mx-4 mt-4">
+                <h3 className="text-sm font-semibold text-slate-700 mb-4 uppercase tracking-wider">Filters</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {/* Date Range */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={e => setStartDate(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm border p-2"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={e => setEndDate(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm border p-2"
+                        />
+                    </div>
+
+                    {/* Academic Years - Multi-select tags */}
+                    <div className="md:col-span-2 lg:col-span-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year(s)</label>
+                        <div className="flex flex-wrap gap-2 border border-gray-300 rounded-md p-2 bg-white min-h-[42px]">
+                            <button
+                                onClick={() => toggleYear('All')}
+                                className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                                    selectedYears.includes('All')
+                                        ? 'bg-violet-600 text-white'
+                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                            >
+                                All Years
+                            </button>
+                            {availableYears.map(yr => (
+                                <button
+                                    key={yr}
+                                    onClick={() => toggleYear(yr)}
+                                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                                        !selectedYears.includes('All') && selectedYears.includes(yr)
+                                            ? 'bg-violet-600 text-white'
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    {yr}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Fee Type */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Fee Type</label>
+                        <select
+                            value={selectedFeeType}
+                            onChange={e => setSelectedFeeType(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm border p-2"
+                        >
+                            <option value="All">All Fee Types</option>
+                            {feeTypes.map(ft => (
+                                <option key={ft.id} value={ft.fee_type}>{ft.fee_type}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Class */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
+                        <select
+                            value={selectedClass}
+                            onChange={e => { setSelectedClass(e.target.value); setSelectedSection('All'); }}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm border p-2"
+                        >
+                            {classList.map(c => (
+                                <option key={c} value={c}>{c === 'All' ? 'All Classes' : c}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Section */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
+                        <select
+                            value={selectedSection}
+                            onChange={e => setSelectedSection(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm border p-2"
+                        >
+                            {sections.map(s => (
+                                <option key={s} value={s}>{s === 'All' ? 'All Sections' : s}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Payment Mode */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Payment Mode</label>
+                        <select
+                            value={selectedMode}
+                            onChange={e => setSelectedMode(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm border p-2"
+                        >
+                            {paymentModes.map(m => (
+                                <option key={m} value={m}>{m === 'All' ? 'All Modes' : m}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex flex-wrap gap-3 px-4 mb-4 items-center">
+                <button
+                    onClick={fetchReport}
+                    disabled={loading}
+                    className="bg-violet-600 hover:bg-violet-700 text-white px-5 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm transition-colors disabled:opacity-60"
+                >
+                    {loading ? (
+                        <>
+                            <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                            </svg>
+                            Loading...
+                        </>
+                    ) : (
+                        <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 0 5 11a6 6 0 0 0 12 0z" />
+                            </svg>
+                            Generate Report
+                        </>
+                    )}
+                </button>
+                <div className="flex-grow" />
+                {lineItems.length > 0 && (
+                    <button
+                        onClick={downloadConsolidatedExcel}
+                        className="bg-white border border-slate-200 text-green-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-50 flex items-center gap-2 shadow-sm transition-colors"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Export Excel
+                    </button>
+                )}
+            </div>
+
+            {error && (
+                <div className="mx-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
+            )}
+
+            {/* Summary Cards */}
+            {rawData && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 px-4 mb-4">
+                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+                        <p className="text-xs text-slate-500 font-medium mb-1">Total Records</p>
+                        <p className="text-2xl font-bold text-slate-800">{totalRecords.toLocaleString()}</p>
+                        <p className="text-xs text-slate-400 mt-1">Line items</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+                        <p className="text-xs text-slate-500 font-medium mb-1">Total Collected</p>
+                        <p className="text-2xl font-bold text-green-700">₹{totalPaid.toLocaleString('en-IN')}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+                        <p className="text-xs text-slate-500 font-medium mb-1">Total Concession</p>
+                        <p className="text-2xl font-bold text-amber-600">₹{totalConcession.toLocaleString('en-IN')}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+                        <p className="text-xs text-slate-500 font-medium mb-1">Total Due</p>
+                        <p className="text-2xl font-bold text-red-600">₹{totalDue.toLocaleString('en-IN')}</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Table */}
+            {rawData && (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mx-4">
+                    {lineItems.length === 0 ? (
+                        <div className="text-center py-16 flex flex-col items-center justify-center">
+                            <div className="bg-slate-50 p-4 rounded-full mb-4">
+                                <svg className="w-12 h-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-lg font-semibold text-slate-700 mb-1">No records found</h3>
+                            <p className="text-slate-500 text-sm">Try adjusting the date range or filters.</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-xs">
+                                    <thead className="bg-violet-50 border-b border-violet-100 text-slate-700">
+                                        <tr>
+                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">S.No</th>
+                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Student</th>
+                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Adm No</th>
+                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Class</th>
+                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Branch</th>
+                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Acad. Year</th>
+                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Receipt No</th>
+                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Fee Type</th>
+                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Installment</th>
+                                            <th className="px-3 py-3 text-right font-semibold whitespace-nowrap">Tot. Amt</th>
+                                            <th className="px-3 py-3 text-right font-semibold whitespace-nowrap">Concession</th>
+                                            <th className="px-3 py-3 text-right font-semibold whitespace-nowrap">Payable</th>
+                                            <th className="px-3 py-3 text-right font-semibold whitespace-nowrap">Paid</th>
+                                            <th className="px-3 py-3 text-right font-semibold whitespace-nowrap">Due</th>
+                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Mode</th>
+                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Remarks</th>
+                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Trans ID</th>
+                                            <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {currentItems.map((r: any, idx: number) => {
+                                            const sNo = (currentPage - 1) * rowsPerPage + idx + 1;
+                                            // Color-code rows by receipt grouping using receipt_no alternation
+                                            const rowBg = idx % 2 === 0 ? '' : 'bg-slate-50/60';
+                                            return (
+                                                <tr key={idx} className={`hover:bg-violet-50/40 transition-colors ${rowBg}`}>
+                                                    <td className="px-3 py-2 text-gray-400 font-medium">{sNo}</td>
+                                                    <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{r.student_name}</td>
+                                                    <td className="px-3 py-2 text-blue-600 whitespace-nowrap">{r.admission_no}</td>
+                                                    <td className="px-3 py-2 whitespace-nowrap">{r.class}{r.section ? ` ${r.section}` : ''}</td>
+                                                    <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{formatReportBranch(r.branch)}</td>
+                                                    <td className="px-3 py-2">
+                                                        <span className="bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full text-xs font-semibold">{r.academic_year}</span>
+                                                    </td>
+                                                    <td className="px-3 py-2 font-mono text-gray-700 whitespace-nowrap">{r.receipt_no}</td>
+                                                    <td className="px-3 py-2 whitespace-nowrap">
+                                                        <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">{r.fee_type || '-'}</span>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{r.installment_name || '-'}</td>
+                                                    <td className="px-3 py-2 text-right font-medium">₹{r.gross_amount.toLocaleString('en-IN')}</td>
+                                                    <td className="px-3 py-2 text-right text-amber-600">{r.concession > 0 ? `₹${r.concession.toLocaleString('en-IN')}` : '-'}</td>
+                                                    <td className="px-3 py-2 text-right">₹{r.net_payable.toLocaleString('en-IN')}</td>
+                                                    <td className="px-3 py-2 text-right font-bold text-green-700">₹{r.amount_paid.toLocaleString('en-IN')}</td>
+                                                    <td className="px-3 py-2 text-right text-red-500">{r.due_amount > 0 ? `₹${r.due_amount.toLocaleString('en-IN')}` : '-'}</td>
+                                                    <td className="px-3 py-2 whitespace-nowrap">{r.mode}</td>
+                                                    <td className="px-3 py-2 text-gray-500 max-w-[100px] truncate" title={r.note}>{r.note || '-'}</td>
+                                                    <td className="px-3 py-2 text-gray-500 max-w-[140px] truncate" title={r.transaction_id}>{r.transaction_id || '-'}</td>
+                                                    <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{formatDateDDMMYYYY(r.date)}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                    {/* Footer totals */}
+                                    <tfoot className="bg-violet-50 border-t-2 border-violet-200 font-bold text-slate-800">
+                                        <tr>
+                                            <td colSpan={9} className="px-3 py-3 text-right text-sm">Page Total ({currentItems.length} rows) →</td>
+                                            <td className="px-3 py-3 text-right text-sm">₹{currentItems.reduce((s: number, r: any) => s + r.gross_amount, 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-sm text-amber-600">₹{currentItems.reduce((s: number, r: any) => s + r.concession, 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-sm">₹{currentItems.reduce((s: number, r: any) => s + r.net_payable, 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-sm text-green-700">₹{currentItems.reduce((s: number, r: any) => s + r.amount_paid, 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-sm text-red-500">₹{currentItems.reduce((s: number, r: any) => s + r.due_amount, 0).toLocaleString('en-IN')}</td>
+                                            <td colSpan={4} />
+                                        </tr>
+                                        <tr className="border-t border-violet-300">
+                                            <td colSpan={9} className="px-3 py-3 text-right text-sm">Grand Total ({lineItems.length} rows) →</td>
+                                            <td className="px-3 py-3 text-right text-sm">₹{lineItems.reduce((s: number, r: any) => s + r.gross_amount, 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-sm text-amber-600">₹{totalConcession.toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-sm">₹{lineItems.reduce((s: number, r: any) => s + r.net_payable, 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-sm text-green-700">₹{totalPaid.toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-sm text-red-500">₹{totalDue.toLocaleString('en-IN')}</td>
+                                            <td colSpan={4} />
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                            {/* Pagination */}
+                            <Pagination
+                                currentPage={currentPage}
+                                totalPages={totalPages}
+                                onPageChange={setCurrentPage}
+                                totalRecords={lineItems.length}
+                                perPage={rowsPerPage}
+                            />
+                        </>
+                    )}
+                </div>
+            )}
+
+            {!rawData && !loading && (
+                <div className="mx-4 bg-white rounded-2xl border border-slate-100 shadow-sm py-16 flex flex-col items-center justify-center text-slate-400">
+                    <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p className="text-lg font-medium text-slate-500">Select date range &amp; click Generate Report</p>
+                    <p className="text-sm mt-1">Each fee line item will appear as a separate row in the report.</p>
+                </div>
+            )}
+        </div>
+    );
+};
+
 export default {
     TodayCollection,
     DailyReport,
@@ -2962,5 +3398,6 @@ export default {
     InstallmentWiseReport,
     DueReport,
     LateFeeDueReport,
-    SearchStudentReport
+    SearchStudentReport,
+    ConsolidateReport
 };

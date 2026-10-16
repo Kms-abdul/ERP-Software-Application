@@ -239,6 +239,150 @@ def report_fee_daily(current_user):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@bp.route("/api/reports/fees/consolidated", methods=["GET"])
+@token_required
+def report_fee_consolidated(current_user):
+    """
+    Consolidated Fee Report:
+    Returns one row per fee line item (NOT grouped by receipt).
+    Supports:
+      - Date range filtering (start_date, end_date)
+      - Multiple academic years (academic_years=2025-2026,2026-2027 OR academic_years=All)
+      - Branch, class, section, fee_type, mode filters
+    """
+    try:
+        if has_global_branch_access(current_user):
+            target_branch = request.headers.get("X-Branch", "All")
+        else:
+            target_branch = current_user.branch
+
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+
+        if not start_date_str or not end_date_str:
+            return jsonify({"error": "start_date and end_date are required"}), 400
+
+        target_start = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        target_end = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+
+        # Academic years filter (comma-separated list or "All")
+        academic_years_param = request.args.get('academic_years', 'All')
+        selected_years = []
+        if academic_years_param and academic_years_param != 'All':
+            selected_years = [y.strip() for y in academic_years_param.split(',') if y.strip()]
+
+        # Other filters
+        class_filter = request.args.get('class', 'All')
+        section_filter = request.args.get('section', 'All')
+        fee_type_filter = request.args.get('fee_type', 'All')
+        mode_filter = request.args.get('mode', 'All')
+        status_filter = request.args.get('status', 'A')
+
+        query = FeePayment.query.options(selectinload(FeePayment.student))
+        query = query.filter(FeePayment.payment_date >= target_start)
+        query = query.filter(FeePayment.payment_date <= target_end)
+
+        # Academic year filter
+        if selected_years:
+            query = query.filter(FeePayment.academic_year.in_(selected_years))
+        # If 'All', no academic_year filter (across all years)
+
+        # Branch filter
+        if target_branch and target_branch not in ['All', 'AllBranches']:
+            query = query.filter(FeePayment.branch == target_branch)
+
+        # Class filter
+        if class_filter and class_filter != 'All':
+            query = query.filter(FeePayment.class_name == class_filter)
+
+        # Section filter
+        if section_filter and section_filter != 'All':
+            query = query.filter(FeePayment.section == section_filter)
+
+        # Fee type filter
+        if fee_type_filter and fee_type_filter != 'All':
+            query = query.filter(FeePayment.fee_type == fee_type_filter)
+
+        # Payment mode filter
+        if mode_filter and mode_filter != 'All':
+            query = query.filter(FeePayment.payment_mode == mode_filter)
+
+        # Status filter
+        if status_filter != 'All':
+            query = query.filter(FeePayment.status == status_filter)
+
+        payments = query.order_by(FeePayment.payment_date.asc(), FeePayment.receipt_no.asc(), FeePayment.id.asc()).all()
+
+        # Build line-level rows (one per payment record)
+        line_items = []
+        for idx, p in enumerate(payments):
+            student_name = ""
+            if p.student:
+                student_name = (p.student.first_name or "") + " " + (p.student.last_name or "")
+                student_name = student_name.strip()
+
+            fee_label = ""
+            if p.fee_type and p.installment_name:
+                fee_label = f"{p.fee_type} - {p.installment_name}"
+            elif p.fee_type:
+                fee_label = p.fee_type
+            elif p.installment_name:
+                fee_label = p.installment_name
+
+            trans_id = ""
+            if p.payment_mode == 'Cheque':
+                trans_id = f"Chq: {p.cheque_no or '-'} | {p.bank_name or '-'} | {p.cheque_date.isoformat() if p.cheque_date else '-'}"
+            else:
+                trans_id = p.TransactionDetails or ""
+
+            line_items.append({
+                "sno": idx + 1,
+                "student_name": student_name,
+                "admission_no": p.student.admission_no if p.student else "",
+                "student_id": p.student_id,
+                "class": p.class_name,
+                "section": p.section or "",
+                "branch": p.branch,
+                "academic_year": p.academic_year,
+                "receipt_no": p.receipt_no,
+                "fee_type": p.fee_type or "",
+                "installment_name": p.installment_name or "",
+                "fee_label": fee_label,
+                "gross_amount": float(p.gross_amount or 0),
+                "concession": float(p.concession_amount or 0),
+                "net_payable": float(p.net_payable or 0),
+                "amount_paid": float(p.amount_paid or 0),
+                "due_amount": float(p.due_amount or 0),
+                "mode": p.payment_mode or "",
+                "note": p.note or "",
+                "transaction_id": trans_id,
+                "date": p.payment_date.isoformat() if p.payment_date else "",
+                "time": to_local_time(p.created_at).strftime("%I:%M %p") if p.created_at else "",
+                "collected_by": p.collected_by_name or "",
+                "status": p.status or "A"
+            })
+
+        total_paid = sum(float(p.amount_paid or 0) for p in payments)
+        total_concession = sum(float(p.concession_amount or 0) for p in payments)
+        total_due = sum(float(p.due_amount or 0) for p in payments)
+
+        return jsonify({
+            "start_date": target_start.isoformat(),
+            "end_date": target_end.isoformat(),
+            "total_records": len(line_items),
+            "total_paid": total_paid,
+            "total_concession": total_concession,
+            "total_due": total_due,
+            "line_items": line_items
+        }), 200
+
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+    except Exception as e:
+        current_app.logger.exception("Consolidated fee report failed")
+        return jsonify({"error": str(e)}), 500
+
+
 @bp.route("/api/reports/fees/monthly", methods=["GET"])
 @token_required
 def report_fee_monthly(current_user):
