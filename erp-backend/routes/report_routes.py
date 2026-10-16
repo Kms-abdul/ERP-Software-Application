@@ -311,15 +311,18 @@ def report_fee_consolidated(current_user):
         if status_filter != 'All':
             query = query.filter(FeePayment.status == status_filter)
 
-        payments = query.order_by(FeePayment.payment_date.asc(), FeePayment.receipt_no.asc(), FeePayment.id.asc()).all()
+        payments = query.order_by(FeePayment.payment_date.desc(), FeePayment.created_at.desc(), FeePayment.receipt_no.desc()).all()
+
+        # Receipts grouped by receipt_no & branch for single-row screen display
+        receipts_list = consolidate_receipts(payments)
 
         # Build line-level rows (one per payment record)
         line_items = []
         for idx, p in enumerate(payments):
             student_name = ""
             if p.student:
-                student_name = (p.student.first_name or "") + " " + (p.student.last_name or "")
-                student_name = student_name.strip()
+                parts = [p.student.first_name, getattr(p.student, 'StudentMiddleName', None), p.student.last_name]
+                student_name = " ".join([pt for pt in parts if pt]).strip()
 
             fee_label = ""
             if p.fee_type and p.installment_name:
@@ -369,10 +372,12 @@ def report_fee_consolidated(current_user):
         return jsonify({
             "start_date": target_start.isoformat(),
             "end_date": target_end.isoformat(),
-            "total_records": len(line_items),
+            "total_records": len(receipts_list),
+            "total_line_items": len(line_items),
             "total_paid": total_paid,
             "total_concession": total_concession,
             "total_due": total_due,
+            "receipts": receipts_list,
             "line_items": line_items
         }), 200
 

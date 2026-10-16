@@ -465,28 +465,78 @@ const FullReceiptsTable: React.FC<{
 const downloadExcelReport = (receipts: any[], filename: string) => {
     if (!receipts?.length) return;
 
-    const excelData = receipts.map((r: any, idx: number) => ({
-        "S.No": idx + 1,
-        Student: r.student_name,
-        AdmissionNo: r.admission_no,
-        Class: `${r.class} ${r.section || ''}`,
-        Branch: formatReportBranch(r.branch),
-        ReceiptNo: r.receipt_no,
-        FeeType: r.fee_type_str,
-        TotalAmount: r.gross_amount || r.amount,
-        Concession: r.concession || 0,
-        Payable: r.net_payable || r.amount,
-        Paid: r.amount_paid || r.amount,
-        Due: r.due_amount || 0,
-        Mode: r.mode,
-        Remarks: r.note || '-',
-        TransactionID: r.mode === 'Cheque' ? `Chq: ${r.cheque_no || '-'} | ${r.bank_name || '-'} | ${r.cheque_date || '-'}` : (r.transaction_id || '-'),
-        Date: formatDateDDMMYYYY(r.date),
-        Time: r.time,
-        TakenBy: r.collected_by
-    }));
+    const excelData: any[] = [];
+    let sno = 1;
+
+    receipts.forEach((r: any) => {
+        const lineItems: any[] | null = (r.line_items && r.line_items.length > 0) ? r.line_items : null;
+        const transId = r.mode === 'Cheque'
+            ? `Chq: ${r.cheque_no || '-'} | ${r.bank_name || '-'} | ${r.cheque_date || '-'}`
+            : (r.transaction_id || '-');
+
+        if (lineItems) {
+            // Expand: one Excel row per fee line item (same as DB raw view)
+            lineItems.forEach((item: any) => {
+                excelData.push({
+                    "S.No": sno++,
+                    "Student": r.student_name,
+                    "AdmissionNo": r.admission_no,
+                    "Class": `${r.class} ${r.section || ''}`.trim(),
+                    "Branch": formatReportBranch(r.branch),
+                    "AcademicYear": r.academic_year || '',
+                    "ReceiptNo": r.receipt_no,
+                    "FeeType": item.fee_type || item.fee_type_str || '-',
+                    "Installment": item.installment_name || '-',
+                    "TotalAmount": item.gross_amount ?? 0,
+                    "Concession": item.concession ?? 0,
+                    "Payable": item.net_payable ?? 0,
+                    "Paid": item.amount_paid ?? 0,
+                    "Due": item.due_amount ?? 0,
+                    "Mode": r.mode,
+                    "Remarks": r.note || '-',
+                    "TransactionID": transId,
+                    "Date": formatDateDDMMYYYY(r.date),
+                    "Time": r.time || '',
+                    "TakenBy": r.collected_by
+                });
+            });
+        } else {
+            // Fallback: single row per receipt (no line_items present)
+            excelData.push({
+                "S.No": sno++,
+                "Student": r.student_name,
+                "AdmissionNo": r.admission_no,
+                "Class": `${r.class} ${r.section || ''}`.trim(),
+                "Branch": formatReportBranch(r.branch),
+                "AcademicYear": r.academic_year || '',
+                "ReceiptNo": r.receipt_no,
+                "FeeType": r.fee_type_str || '-',
+                "Installment": '-',
+                "TotalAmount": r.gross_amount || r.amount || 0,
+                "Concession": r.concession || 0,
+                "Payable": r.net_payable || r.amount || 0,
+                "Paid": r.amount_paid || r.amount || 0,
+                "Due": r.due_amount || 0,
+                "Mode": r.mode,
+                "Remarks": r.note || '-',
+                "TransactionID": transId,
+                "Date": formatDateDDMMYYYY(r.date),
+                "Time": r.time || '',
+                "TakenBy": r.collected_by
+            });
+        }
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    // Auto-width columns
+    if (excelData.length > 0) {
+        const colWidths = Object.keys(excelData[0]).map(key => ({
+            wch: Math.max(key.length, ...excelData.map(row => String(row[key] ?? '').length)) + 2
+        }));
+        worksheet['!cols'] = colWidths;
+    }
+
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
 

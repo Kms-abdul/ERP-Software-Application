@@ -174,7 +174,7 @@ const FeeReports: React.FC<FeeReportsProps> = ({ singleDailyMode }) => {
                         {activeTab === 'due' && <DueReport />}
                         {activeTab === 'late-due' && <LateFeeDueReport />}
                         {activeTab === 'search' && <SearchStudentReport onViewReceipt={handleViewReceipt} />}
-                        {activeTab === 'consolidate' && <ConsolidateReport />}
+                        {activeTab === 'consolidate' && <ConsolidateReport onViewReceipt={handleViewReceipt} />}
                     </>
                 )}
             </div>
