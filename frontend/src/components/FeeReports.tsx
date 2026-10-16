@@ -7,7 +7,8 @@ import {
     InstallmentWiseReport,
     DueReport,
     LateFeeDueReport,
-    SearchStudentReport
+    SearchStudentReport,
+    ConsolidateReport
 } from './FeeReportComponents';
 import FeeReceipt from './FeeReceipt';
 import api from '../api';
@@ -126,8 +127,8 @@ const FeeReports: React.FC<FeeReportsProps> = ({ singleDailyMode }) => {
         { id: 'installment', label: 'Installment Wise' },
         { id: 'due', label: 'Due Report' },
         { id: 'late-due', label: 'Late Fee Due' },
-        { id: 'search', label: 'Search Student' }
-
+        { id: 'search', label: 'Search Student' },
+        { id: 'consolidate', label: 'Consolidate Report' }
     ];
 
     return (
@@ -173,6 +174,7 @@ const FeeReports: React.FC<FeeReportsProps> = ({ singleDailyMode }) => {
                         {activeTab === 'due' && <DueReport />}
                         {activeTab === 'late-due' && <LateFeeDueReport />}
                         {activeTab === 'search' && <SearchStudentReport onViewReceipt={handleViewReceipt} />}
+                        {activeTab === 'consolidate' && <ConsolidateReport onViewReceipt={handleViewReceipt} />}
                     </>
                 )}
             </div>

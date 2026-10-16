@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api';
-import { ChevronDownIcon, PrinterIcon, EyeIcon } from './icons';
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
@@ -465,28 +464,78 @@ const FullReceiptsTable: React.FC<{
 const downloadExcelReport = (receipts: any[], filename: string) => {
     if (!receipts?.length) return;
 
-    const excelData = receipts.map((r: any, idx: number) => ({
-        "S.No": idx + 1,
-        Student: r.student_name,
-        AdmissionNo: r.admission_no,
-        Class: `${r.class} ${r.section || ''}`,
-        Branch: formatReportBranch(r.branch),
-        ReceiptNo: r.receipt_no,
-        FeeType: r.fee_type_str,
-        TotalAmount: r.gross_amount || r.amount,
-        Concession: r.concession || 0,
-        Payable: r.net_payable || r.amount,
-        Paid: r.amount_paid || r.amount,
-        Due: r.due_amount || 0,
-        Mode: r.mode,
-        Remarks: r.note || '-',
-        TransactionID: r.mode === 'Cheque' ? `Chq: ${r.cheque_no || '-'} | ${r.bank_name || '-'} | ${r.cheque_date || '-'}` : (r.transaction_id || '-'),
-        Date: formatDateDDMMYYYY(r.date),
-        Time: r.time,
-        TakenBy: r.collected_by
-    }));
+    const excelData: any[] = [];
+    let sno = 1;
+
+    receipts.forEach((r: any) => {
+        const lineItems: any[] | null = (r.line_items && r.line_items.length > 0) ? r.line_items : null;
+        const transId = r.mode === 'Cheque'
+            ? `Chq: ${r.cheque_no || '-'} | ${r.bank_name || '-'} | ${r.cheque_date || '-'}`
+            : (r.transaction_id || '-');
+
+        if (lineItems) {
+            // Expand: one Excel row per fee line item (same as DB raw view)
+            lineItems.forEach((item: any) => {
+                excelData.push({
+                    "S.No": sno++,
+                    "Student": r.student_name,
+                    "AdmissionNo": r.admission_no,
+                    "Class": `${r.class} ${r.section || ''}`.trim(),
+                    "Branch": formatReportBranch(r.branch),
+                    "AcademicYear": r.academic_year || '',
+                    "ReceiptNo": r.receipt_no,
+                    "FeeType": item.fee_type || item.fee_type_str || '-',
+                    "Installment": item.installment_name || '-',
+                    "TotalAmount": item.gross_amount ?? 0,
+                    "Concession": item.concession ?? 0,
+                    "Payable": item.net_payable ?? 0,
+                    "Paid": item.amount_paid ?? 0,
+                    "Due": item.due_amount ?? 0,
+                    "Mode": r.mode,
+                    "Remarks": r.note || '-',
+                    "TransactionID": transId,
+                    "Date": formatDateDDMMYYYY(r.date),
+                    "Time": r.time || '',
+                    "TakenBy": r.collected_by
+                });
+            });
+        } else {
+            // Fallback: single row per receipt (no line_items present)
+            excelData.push({
+                "S.No": sno++,
+                "Student": r.student_name,
+                "AdmissionNo": r.admission_no,
+                "Class": `${r.class} ${r.section || ''}`.trim(),
+                "Branch": formatReportBranch(r.branch),
+                "AcademicYear": r.academic_year || '',
+                "ReceiptNo": r.receipt_no,
+                "FeeType": r.fee_type_str || '-',
+                "Installment": '-',
+                "TotalAmount": r.gross_amount || r.amount || 0,
+                "Concession": r.concession || 0,
+                "Payable": r.net_payable || r.amount || 0,
+                "Paid": r.amount_paid || r.amount || 0,
+                "Due": r.due_amount || 0,
+                "Mode": r.mode,
+                "Remarks": r.note || '-',
+                "TransactionID": transId,
+                "Date": formatDateDDMMYYYY(r.date),
+                "Time": r.time || '',
+                "TakenBy": r.collected_by
+            });
+        }
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    // Auto-width columns
+    if (excelData.length > 0) {
+        const colWidths = Object.keys(excelData[0]).map(key => ({
+            wch: Math.max(key.length, ...excelData.map(row => String(row[key] ?? '').length)) + 2
+        }));
+        worksheet['!cols'] = colWidths;
+    }
+
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
 
@@ -2954,6 +3003,425 @@ export const SearchStudentReport: React.FC<ReportProps> = ({ onViewReceipt }) =>
         </div>
     );
 };
+// --------------------------------------------------------------------------
+// Consolidate Report
+// --------------------------------------------------------------------------
+export const ConsolidateReport: React.FC<ReportProps> = ({ onViewReceipt }) => {
+    const today = new Date().toISOString().split('T')[0];
+    const [startDate, setStartDate] = useState<string>(today);
+    const [endDate, setEndDate] = useState<string>(today);
+    const [availableYears, setAvailableYears] = useState<string[]>([]);
+    const [selectedYears, setSelectedYears] = useState<string[]>(['All']);
+    const [classList, setClassList] = useState<string[]>([]);
+    const [feeTypes, setFeeTypes] = useState<any[]>([]);
+    const [selectedClass, setSelectedClass] = useState('All');
+    const [selectedSection, setSelectedSection] = useState('All');
+    const [selectedFeeType, setSelectedFeeType] = useState('All');
+    const [selectedMode, setSelectedMode] = useState('All');
+    const [rawData, setRawData] = useState<any>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const rowsPerPage = 15;
+
+    const sections = useClassSections(selectedClass);
+    const paymentModes = ['All', 'Cash', 'UPI', 'Card', 'Bank Transfer', 'Cheque'];
+
+    useEffect(() => {
+        const init = async () => {
+            try {
+                const [resYears, resClasses, resTypes] = await Promise.all([
+                    api.get('/org/academic-years'),
+                    api.get('/classes'),
+                    api.get('/fee-types')
+                ]);
+                const years: string[] = (resYears.data.academic_years || resYears.data || []).map((y: any) => y.code || y.display_name || y);
+                setAvailableYears(years);
+
+                const classesData = resClasses.data.classes || [];
+                setClassList(['All', ...classesData.map((c: any) => c.class_name)]);
+
+                const allTypes = Array.isArray(resTypes.data) ? resTypes.data : resTypes.data.fee_types || [];
+                setFeeTypes(allTypes);
+            } catch (err) {
+                console.error('ConsolidateReport init error', err);
+            }
+        };
+        init();
+    }, []);
+
+    const toggleYear = (year: string) => {
+        if (year === 'All') {
+            setSelectedYears(['All']);
+            return;
+        }
+        setSelectedYears(prev => {
+            const withoutAll = prev.filter(y => y !== 'All');
+            if (withoutAll.includes(year)) {
+                const next = withoutAll.filter(y => y !== year);
+                return next.length === 0 ? ['All'] : next;
+            } else {
+                return [...withoutAll, year];
+            }
+        });
+    };
+
+    const fetchReport = async () => {
+        try {
+            setLoading(true);
+            setError('');
+            setCurrentPage(1);
+            const params = new URLSearchParams({
+                start_date: startDate,
+                end_date: endDate,
+                academic_years: selectedYears.includes('All') ? 'All' : selectedYears.join(','),
+                class: selectedClass,
+                section: selectedSection,
+                fee_type: selectedFeeType,
+                mode: selectedMode,
+            });
+            const res = await api.get(`/reports/fees/consolidated?${params.toString()}`);
+            setRawData(res.data);
+        } catch (err: any) {
+            setError(err.response?.data?.error || 'Failed to fetch consolidated report');
+            setRawData(null);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const receipts: any[] = rawData?.receipts || [];
+    const totalPages = Math.ceil(receipts.length / rowsPerPage);
+    const currentItems = receipts.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+    const handleDownloadExcel = () => {
+        if (!receipts.length) return;
+        downloadExcelReport(receipts, `Consolidated_Fee_Report_${startDate}_to_${endDate}`);
+    };
+
+    const totalPaid = rawData?.total_paid || 0;
+    const totalConcession = rawData?.total_concession || 0;
+    const totalDue = rawData?.total_due || 0;
+
+    return (
+        <div className="space-y-4 font-sans">
+            {/* Filter Container */}
+            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 mb-6 shadow-sm mx-4 mt-4">
+                <h3 className="text-sm font-semibold text-slate-700 mb-4 uppercase tracking-wider">Filters</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {/* Date Range */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={e => setStartDate(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm border p-2"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={e => setEndDate(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm border p-2"
+                        />
+                    </div>
+
+                    {/* Academic Years - Multi-select tags */}
+                    <div className="md:col-span-2 lg:col-span-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year(s)</label>
+                        <div className="flex flex-wrap gap-2 border border-gray-300 rounded-md p-2 bg-white min-h-[42px]">
+                            <button
+                                onClick={() => toggleYear('All')}
+                                className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                                    selectedYears.includes('All')
+                                        ? 'bg-violet-600 text-white'
+                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                            >
+                                All Years
+                            </button>
+                            {availableYears.map(yr => (
+                                <button
+                                    key={yr}
+                                    onClick={() => toggleYear(yr)}
+                                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                                        !selectedYears.includes('All') && selectedYears.includes(yr)
+                                            ? 'bg-violet-600 text-white'
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    {yr}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Fee Type */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Fee Type</label>
+                        <select
+                            value={selectedFeeType}
+                            onChange={e => setSelectedFeeType(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm border p-2"
+                        >
+                            <option value="All">All Fee Types</option>
+                            {feeTypes.map(ft => (
+                                <option key={ft.id} value={ft.fee_type}>{ft.fee_type}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Class */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
+                        <select
+                            value={selectedClass}
+                            onChange={e => { setSelectedClass(e.target.value); setSelectedSection('All'); }}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm border p-2"
+                        >
+                            {classList.map(c => (
+                                <option key={c} value={c}>{c === 'All' ? 'All Classes' : c}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Section */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
+                        <select
+                            value={selectedSection}
+                            onChange={e => setSelectedSection(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm border p-2"
+                        >
+                            {sections.map(s => (
+                                <option key={s} value={s}>{s === 'All' ? 'All Sections' : s}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Payment Mode */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Payment Mode</label>
+                        <select
+                            value={selectedMode}
+                            onChange={e => setSelectedMode(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm border p-2"
+                        >
+                            {paymentModes.map(m => (
+                                <option key={m} value={m}>{m === 'All' ? 'All Modes' : m}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex flex-wrap gap-3 px-4 mb-4 items-center">
+                <button
+                    onClick={fetchReport}
+                    disabled={loading}
+                    className="bg-violet-600 hover:bg-violet-700 text-white px-5 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm transition-colors disabled:opacity-60"
+                >
+                    {loading ? (
+                        <>
+                            <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                            </svg>
+                            Loading...
+                        </>
+                    ) : (
+                        <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 0 5 11a6 6 0 0 0 12 0z" />
+                            </svg>
+                            Generate Report
+                        </>
+                    )}
+                </button>
+                <div className="flex-grow" />
+                {receipts.length > 0 && (
+                    <button
+                        onClick={handleDownloadExcel}
+                        className="bg-white border border-slate-200 text-green-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-50 flex items-center gap-2 shadow-sm transition-colors"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Export Excel
+                    </button>
+                )}
+            </div>
+
+            {error && (
+                <div className="mx-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
+            )}
+
+            {/* Summary Cards */}
+            {rawData && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 px-4 mb-4">
+                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+                        <p className="text-xs text-slate-500 font-medium mb-1">Total Receipts</p>
+                        <p className="text-2xl font-bold text-slate-800">{receipts.length.toLocaleString()}</p>
+                        <p className="text-xs text-slate-400 mt-1">{rawData?.total_line_items || receipts.length} fee items</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+                        <p className="text-xs text-slate-500 font-medium mb-1">Total Collected</p>
+                        <p className="text-2xl font-bold text-green-700">₹{totalPaid.toLocaleString('en-IN')}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+                        <p className="text-xs text-slate-500 font-medium mb-1">Total Concession</p>
+                        <p className="text-2xl font-bold text-amber-600">₹{totalConcession.toLocaleString('en-IN')}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+                        <p className="text-xs text-slate-500 font-medium mb-1">Total Due</p>
+                        <p className="text-2xl font-bold text-red-600">₹{totalDue.toLocaleString('en-IN')}</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Table */}
+            {rawData && (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mx-4">
+                    {receipts.length === 0 ? (
+                        <div className="text-center py-16 flex flex-col items-center justify-center">
+                            <div className="bg-slate-50 p-4 rounded-full mb-4">
+                                <svg className="w-12 h-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-lg font-semibold text-slate-700 mb-1">No receipts found</h3>
+                            <p className="text-slate-500 text-sm">Try adjusting the date range or filters.</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-xs">
+                                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">S.No</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Student Name</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Adm No.</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Class</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Branch</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Acad. Year</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Rcpt No</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Fee Type</th>
+                                            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">Tot.Amt</th>
+                                            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">Concession</th>
+                                            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">Pay Amt</th>
+                                            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">Paid</th>
+                                            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">Due</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mode</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Trans ID</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Note</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Date/Time</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Taken By</th>
+                                            <th className="px-3 py-2 text-center font-semibold whitespace-nowrap">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 text-xs">
+                                        {currentItems.map((r: any, idx: number) => {
+                                            const sNo = (currentPage - 1) * rowsPerPage + idx + 1;
+                                            return (
+                                                <tr key={idx} className="hover:bg-violet-50/30 transition-colors h-[45px]">
+                                                    <td className="px-3 py-2 text-gray-500 font-medium">{sNo}</td>
+                                                    <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{r.student_name}</td>
+                                                    <td className="px-3 py-2 text-blue-600 whitespace-nowrap">{r.admission_no}</td>
+                                                    <td className="px-3 py-2 whitespace-nowrap">{r.class}{r.section ? ` ${r.section}` : ''}</td>
+                                                    <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{formatReportBranch(r.branch)}</td>
+                                                    <td className="px-3 py-2 whitespace-nowrap">
+                                                        <span className="bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full text-xs font-semibold">{r.academic_year}</span>
+                                                    </td>
+                                                    <td className="px-3 py-2 font-mono text-gray-800 whitespace-nowrap">{r.receipt_no}</td>
+                                                    <td className="px-3 py-2 max-w-[220px] truncate" title={r.fee_type_str}>
+                                                        <span className="text-gray-700">{r.fee_type_str || '-'}</span>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right font-medium">₹{(r.gross_amount || 0).toLocaleString('en-IN')}</td>
+                                                    <td className="px-3 py-2 text-right text-amber-600">{r.concession > 0 ? `₹${r.concession.toLocaleString('en-IN')}` : '-'}</td>
+                                                    <td className="px-3 py-2 text-right">₹{(r.net_payable || 0).toLocaleString('en-IN')}</td>
+                                                    <td className="px-3 py-2 text-right font-bold text-gray-800">₹{(r.amount_paid || 0).toLocaleString('en-IN')}</td>
+                                                    <td className="px-3 py-2 text-right text-red-500">{r.due_amount > 0 ? `₹${r.due_amount.toLocaleString('en-IN')}` : '-'}</td>
+                                                    <td className="px-3 py-2 whitespace-nowrap">{r.mode}</td>
+                                                    <td className="px-3 py-2 text-xs max-w-[150px]">
+                                                        {r.mode === 'Cheque' ? (
+                                                            <div className="truncate" title={`Chq: ${r.cheque_no || '-'} | ${r.bank_name || '-'} | ${r.cheque_date ? formatDateDDMMYYYY(r.cheque_date) : '-'}`}>
+                                                                <div>{r.cheque_no || '-'}</div>
+                                                                <div className="text-gray-400">{r.bank_name || '-'}</div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="truncate" title={r.transaction_id}>{r.transaction_id || '-'}</div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-xs text-gray-500 max-w-[120px] truncate" title={r.note}>{r.note || '-'}</td>
+                                                    <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
+                                                        {formatDateDDMMYYYY(r.date)} <br /> {r.time}
+                                                    </td>
+                                                    <td className="px-3 py-2 whitespace-nowrap text-gray-600">{r.collected_by || '-'}</td>
+                                                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                                                        <button
+                                                            onClick={() => onViewReceipt && onViewReceipt(r.receipt_no, r.branch, r.student_id)}
+                                                            className="text-white bg-violet-600 hover:bg-violet-700 px-3 py-1 rounded text-xs transition-colors"
+                                                        >
+                                                            View
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                    {/* Footer totals */}
+                                    <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-bold text-slate-800 text-xs">
+                                        <tr>
+                                            <td colSpan={8} className="px-3 py-3 text-right">Page Total ({currentItems.length} receipts) →</td>
+                                            <td className="px-3 py-3 text-right">₹{currentItems.reduce((s: number, r: any) => s + (r.gross_amount || 0), 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-amber-600">₹{currentItems.reduce((s: number, r: any) => s + (r.concession || 0), 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right">₹{currentItems.reduce((s: number, r: any) => s + (r.net_payable || 0), 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-green-700">₹{currentItems.reduce((s: number, r: any) => s + (r.amount_paid || 0), 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-red-500">₹{currentItems.reduce((s: number, r: any) => s + (r.due_amount || 0), 0).toLocaleString('en-IN')}</td>
+                                            <td colSpan={6} />
+                                        </tr>
+                                        <tr className="border-t border-slate-300">
+                                            <td colSpan={8} className="px-3 py-3 text-right">Grand Total ({receipts.length} receipts) →</td>
+                                            <td className="px-3 py-3 text-right">₹{receipts.reduce((s: number, r: any) => s + (r.gross_amount || 0), 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-amber-600">₹{totalConcession.toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right">₹{receipts.reduce((s: number, r: any) => s + (r.net_payable || 0), 0).toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-green-700">₹{totalPaid.toLocaleString('en-IN')}</td>
+                                            <td className="px-3 py-3 text-right text-red-500">₹{totalDue.toLocaleString('en-IN')}</td>
+                                            <td colSpan={6} />
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                            {/* Pagination */}
+                            <Pagination
+                                currentPage={currentPage}
+                                totalPages={totalPages}
+                                onPageChange={setCurrentPage}
+                                totalRecords={receipts.length}
+                                perPage={rowsPerPage}
+                            />
+                        </>
+                    )}
+                </div>
+            )}
+
+            {!rawData && !loading && (
+                <div className="mx-4 bg-white rounded-2xl border border-slate-100 shadow-sm py-16 flex flex-col items-center justify-center text-slate-400">
+                    <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p className="text-lg font-medium text-slate-500">Select date range &amp; click Generate Report</p>
+                    <p className="text-sm mt-1">Receipts will appear with consolidated details, and export to Excel with individual line items.</p>
+                </div>
+            )}
+        </div>
+    );
+};
+
 export default {
     TodayCollection,
     DailyReport,
@@ -2962,5 +3430,6 @@ export default {
     InstallmentWiseReport,
     DueReport,
     LateFeeDueReport,
-    SearchStudentReport
+    SearchStudentReport,
+    ConsolidateReport
 };
