@@ -2,8 +2,8 @@ from flask import Blueprint, jsonify, request, current_app
 from extensions import db, to_local_time
 from models import FeePayment, Student, StudentFee, RemittanceMaster, Branch
 from helpers import token_required, require_academic_year, has_global_branch_access, user_can_access_branch
-from datetime import date, datetime
-from sqlalchemy import func, or_, extract
+from datetime import date, datetime, time
+from sqlalchemy import func, or_, and_, extract
 from sqlalchemy.orm import selectinload
 
 def consolidate_receipts(payments):
@@ -105,9 +105,23 @@ def report_fee_today(current_user):
          target_branch = current_user.branch
 
     today = date.today()
+    start_dt = datetime.combine(today, time.min)
+    end_dt = datetime.combine(today, time.max)
     
     try:
-        query = FeePayment.query.options(selectinload(FeePayment.student)).filter(FeePayment.payment_date == today)
+        date_type = request.args.get('date_type', 'either')
+        query = FeePayment.query.options(selectinload(FeePayment.student))
+        if date_type == 'payment_date':
+            query = query.filter(FeePayment.payment_date == today)
+        elif date_type == 'created_at':
+            query = query.filter(FeePayment.created_at >= start_dt, FeePayment.created_at <= end_dt)
+        else:
+            query = query.filter(
+                or_(
+                    FeePayment.payment_date == today,
+                    and_(FeePayment.created_at >= start_dt, FeePayment.created_at <= end_dt)
+                )
+            )
         query = query.filter(FeePayment.academic_year == h_year)
         
         if target_branch and target_branch not in ['All', 'AllBranches']:
@@ -170,8 +184,22 @@ def report_fee_daily(current_user):
         else:
              return jsonify({"error": "Date range (start_date, end_date) or specific date required"}), 400
         
-        query = FeePayment.query.options(selectinload(FeePayment.student)).filter(FeePayment.payment_date >= target_start)
-        query = query.filter(FeePayment.payment_date <= target_end)
+        start_dt = datetime.combine(target_start, time.min)
+        end_dt = datetime.combine(target_end, time.max)
+        date_type = request.args.get('date_type', 'either')
+        
+        query = FeePayment.query.options(selectinload(FeePayment.student))
+        if date_type == 'payment_date':
+            query = query.filter(FeePayment.payment_date >= target_start, FeePayment.payment_date <= target_end)
+        elif date_type == 'created_at':
+            query = query.filter(FeePayment.created_at >= start_dt, FeePayment.created_at <= end_dt)
+        else:
+            query = query.filter(
+                or_(
+                    and_(FeePayment.payment_date >= target_start, FeePayment.payment_date <= target_end),
+                    and_(FeePayment.created_at >= start_dt, FeePayment.created_at <= end_dt)
+                )
+            )
         query = query.filter(FeePayment.academic_year == h_year)
         
         if target_branch and target_branch not in ['All', 'AllBranches']:
@@ -289,9 +317,22 @@ def report_fee_consolidated(current_user):
         mode_filter = request.args.get('mode', 'All')
         status_filter = request.args.get('status', 'A')
 
+        start_dt = datetime.combine(target_start, time.min)
+        end_dt = datetime.combine(target_end, time.max)
+        date_type = request.args.get('date_type', 'either')
+
         query = FeePayment.query.options(selectinload(FeePayment.student))
-        query = query.filter(FeePayment.payment_date >= target_start)
-        query = query.filter(FeePayment.payment_date <= target_end)
+        if date_type == 'payment_date':
+            query = query.filter(FeePayment.payment_date >= target_start, FeePayment.payment_date <= target_end)
+        elif date_type == 'created_at':
+            query = query.filter(FeePayment.created_at >= start_dt, FeePayment.created_at <= end_dt)
+        else:
+            query = query.filter(
+                or_(
+                    and_(FeePayment.payment_date >= target_start, FeePayment.payment_date <= target_end),
+                    and_(FeePayment.created_at >= start_dt, FeePayment.created_at <= end_dt)
+                )
+            )
 
         # Academic year filter
         if selected_years:
@@ -424,10 +465,26 @@ def report_fee_monthly(current_user):
         if not month or not year:
             return jsonify({"error": "Month and Year required"}), 400
             
-        query = FeePayment.query.options(selectinload(FeePayment.student)).filter(
-            FeePayment.payment_month == int(month),
-            FeePayment.payment_year == int(year)
-        )
+        m_int = int(month)
+        y_int = int(year)
+        import calendar
+        _, last_day = calendar.monthrange(y_int, m_int)
+        m_start_dt = datetime.combine(date(y_int, m_int, 1), time.min)
+        m_end_dt = datetime.combine(date(y_int, m_int, last_day), time.max)
+            
+        date_type = request.args.get('date_type', 'either')
+        query = FeePayment.query.options(selectinload(FeePayment.student))
+        if date_type == 'payment_date':
+            query = query.filter(FeePayment.payment_month == m_int, FeePayment.payment_year == y_int)
+        elif date_type == 'created_at':
+            query = query.filter(FeePayment.created_at >= m_start_dt, FeePayment.created_at <= m_end_dt)
+        else:
+            query = query.filter(
+                or_(
+                    and_(FeePayment.payment_month == m_int, FeePayment.payment_year == y_int),
+                    and_(FeePayment.created_at >= m_start_dt, FeePayment.created_at <= m_end_dt)
+                )
+            )
         query = query.filter(FeePayment.academic_year == h_year)
         
         if target_branch and target_branch not in ['All', 'AllBranches']:

@@ -595,6 +595,7 @@ def get_assignment_data():
         academic_year = request.args.get("academic_year")
         branch = request.args.get("branch")
         subject_type = request.args.get("subject_type")
+        category = request.args.get("category")
         
         if not all([class_id, academic_year, branch]):
             return jsonify({"error": "Missing required filters"}), 400
@@ -602,7 +603,7 @@ def get_assignment_data():
         # Normalize academic year (trim spaces)
         academic_year = academic_year.strip() if academic_year else academic_year
 
-        print(f"[DEBUG] get_assignment_data: class_id={class_id}, academic_year='{academic_year}', branch={branch}")
+        print(f"[DEBUG] get_assignment_data: class_id={class_id}, academic_year='{academic_year}', branch={branch}, category={category}")
 
         # 1. Get Students (History-Aware)
         # We need to find students who were in this class/section in the requested academic_year.
@@ -644,6 +645,14 @@ def get_assignment_data():
                 and_(StudentAcademicRecord.id == None, Student.section == section_id)
             ))
             
+        # Filter by Category (if provided)
+        if category and category != "All" and category != "All Categories":
+            cat_str = "Hifz+Nazira" if category == "Hifz + Nazira" else category
+            query = query.filter(or_(
+                Student.AdmissionCategory == cat_str,
+                Student.AdmissionCategory == category
+            ))
+
         # Status - optional, maybe only Active?
         query = query.filter(Student.status == "Active")
 
@@ -655,11 +664,16 @@ def get_assignment_data():
             # If record exists, use its roll number, otherwise student's
             roll_no = record.roll_number if record else student.Roll_Number
             
+            cat_display = student.AdmissionCategory or ""
+            if cat_display == "Hifz+Nazira":
+                cat_display = "Hifz + Nazira"
+
             student_list.append({
                 "student_id": student.student_id,
                 "admission_no": student.admission_no,
                 "name": f"{student.first_name or ''} {student.last_name or ''}".strip(),
-                "roll_number": roll_no
+                "roll_number": roll_no,
+                "category": cat_display
             })
 
         # 2. Get Class Subjects (Default Assignments)

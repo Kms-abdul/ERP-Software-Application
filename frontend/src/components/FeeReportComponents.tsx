@@ -613,6 +613,7 @@ export const TodayCollection: React.FC<ReportProps> = ({ onViewReceipt }) => {
     const [selectedFeeType, setSelectedFeeType] = useState('All');
     const [selectedMode, setSelectedMode] = useState('All');
     const [selectedCollector, setSelectedCollector] = useState('All');
+    const [selectedDateType, setSelectedDateType] = useState('either');
     const [collectors, setCollectors] = useState<string[]>([]);
 
     const sections = useClassSections(selectedClass);
@@ -650,7 +651,7 @@ export const TodayCollection: React.FC<ReportProps> = ({ onViewReceipt }) => {
         loadInitialData();
     }, []);
 
-    const fetchReport = async () => {
+    const fetchReport = async (dateTypeOverride?: string) => {
         try {
             setLoading(true);
             // Fetch BROAD data (All) and filter locally as requested
@@ -659,7 +660,8 @@ export const TodayCollection: React.FC<ReportProps> = ({ onViewReceipt }) => {
                 fee_type: 'All',
                 section: 'All',
                 mode: 'All',
-                collected_by: 'All'
+                collected_by: 'All',
+                date_type: dateTypeOverride || selectedDateType
             });
             const res = await api.get(`/reports/fees/today?${params.toString()}`);
             setRawData(res.data);
@@ -752,6 +754,24 @@ export const TodayCollection: React.FC<ReportProps> = ({ onViewReceipt }) => {
                         ))}
                     </select>
                 </div>
+
+                {/* Date Filter By */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date Filter By</label>
+                    <select
+                        value={selectedDateType}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            setSelectedDateType(val);
+                            fetchReport(val);
+                        }}
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border p-2"
+                    >
+                        <option value="either">Both (Payment or Created Date)</option>
+                        <option value="payment_date">Payment Date Only</option>
+                        <option value="created_at">Receipt Created Date Only</option>
+                    </select>
+                </div>
             </FilterContainer>
 
             {/* Actions Row */}
@@ -818,6 +838,7 @@ export const DailyReport: React.FC<ReportProps> = ({ onViewReceipt, forcedStatus
     const [selectedFeeType, setSelectedFeeType] = useState('All');
     const [selectedMode, setSelectedMode] = useState('All');
     const [selectedCollector, setSelectedCollector] = useState('All');
+    const [selectedDateType, setSelectedDateType] = useState('either');
     const [collectors, setCollectors] = useState<string[]>([]);
 
     const sections = useClassSections(selectedClass);
@@ -875,7 +896,8 @@ export const DailyReport: React.FC<ReportProps> = ({ onViewReceipt, forcedStatus
                 section: 'All',
                 fee_type: 'All',
                 mode: 'All',
-                collected_by: 'All'
+                collected_by: 'All',
+                date_type: selectedDateType
             });
             if (forcedStatus) params.append('status', forcedStatus);
             if (forcedConcession) params.append('has_concession', 'true');
@@ -1002,6 +1024,20 @@ export const DailyReport: React.FC<ReportProps> = ({ onViewReceipt, forcedStatus
                         {paymentModes.map(m => (
                             <option key={m} value={m}>{m === 'All' ? 'All Modes' : m}</option>
                         ))}
+                    </select>
+                </div>
+
+                {/* Date Filter By */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date Filter By</label>
+                    <select
+                        value={selectedDateType}
+                        onChange={(e) => setSelectedDateType(e.target.value)}
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border p-2"
+                    >
+                        <option value="either">Both (Payment or Created Date)</option>
+                        <option value="payment_date">Payment Date Only</option>
+                        <option value="created_at">Receipt Created Date Only</option>
                     </select>
                 </div>
             </FilterContainer>
@@ -3044,6 +3080,7 @@ export const ConsolidateReport: React.FC<ReportProps> = ({ onViewReceipt }) => {
     const [selectedSection, setSelectedSection] = useState('All');
     const [selectedFeeType, setSelectedFeeType] = useState('All');
     const [selectedMode, setSelectedMode] = useState('All');
+    const [selectedDateType, setSelectedDateType] = useState('either');
     const [rawData, setRawData] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -3105,6 +3142,7 @@ export const ConsolidateReport: React.FC<ReportProps> = ({ onViewReceipt }) => {
                 section: selectedSection,
                 fee_type: selectedFeeType,
                 mode: selectedMode,
+                date_type: selectedDateType
             });
             const res = await api.get(`/reports/fees/consolidated?${params.toString()}`);
             setRawData(res.data);
@@ -3239,6 +3277,20 @@ export const ConsolidateReport: React.FC<ReportProps> = ({ onViewReceipt }) => {
                             {paymentModes.map(m => (
                                 <option key={m} value={m}>{m === 'All' ? 'All Modes' : m}</option>
                             ))}
+                        </select>
+                    </div>
+
+                    {/* Date Filter By */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Date Filter By</label>
+                        <select
+                            value={selectedDateType}
+                            onChange={(e) => setSelectedDateType(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm border p-2"
+                        >
+                            <option value="either">Both (Payment or Created Date)</option>
+                            <option value="payment_date">Payment Date Only</option>
+                            <option value="created_at">Receipt Created Date Only</option>
                         </select>
                     </div>
                 </div>
