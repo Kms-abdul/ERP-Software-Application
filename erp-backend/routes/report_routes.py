@@ -18,6 +18,7 @@ def consolidate_receipts(payments):
         key = f"{p.branch}_{p.receipt_no}"
 
         if key not in receipt_map:
+            p_created_local = to_local_time(p.created_at) if p.created_at else None
             receipt_map[key] = {
                 "receipt_no": p.receipt_no,
                 "student_name": (p.student.first_name if p.student else "Unknown") + " " + (p.student.last_name if p.student and p.student.last_name else ""),
@@ -32,8 +33,12 @@ def consolidate_receipts(payments):
                 "net_payable": 0.0,
                 "amount_paid": 0.0,
                 "due_amount": 0.0,
-                "date": p.payment_date.isoformat(),
-                "time": to_local_time(p.created_at).strftime("%I:%M %p") if p.created_at else "",
+                "date": p.payment_date.isoformat() if p.payment_date else "",
+                "payment_date": p.payment_date.isoformat() if p.payment_date else "",
+                "time": p_created_local.strftime("%I:%M %p") if p_created_local else "",
+                "created_at": p_created_local.isoformat() if p_created_local else None,
+                "created_date": p_created_local.strftime("%Y-%m-%d") if p_created_local else "",
+                "created_time": p_created_local.strftime("%I:%M %p") if p_created_local else "",
                 "mode": p.payment_mode,
                 "note": p.note,
                 "transaction_id": p.TransactionDetails,
@@ -58,6 +63,7 @@ def consolidate_receipts(payments):
         f_name = f"{p.fee_type or ''} {p.installment_name or ''}".strip()
         if f_name and f_name not in item["fee_types"]:
             item["fee_types"].append(f_name)
+        p_line_created_local = to_local_time(p.created_at) if p.created_at else None
         item["line_items"].append({
             "fee_type": p.fee_type,
             "installment_name": p.installment_name,
@@ -66,7 +72,12 @@ def consolidate_receipts(payments):
             "concession": float(p.concession_amount or 0),
             "net_payable": float(p.net_payable or 0),
             "amount_paid": float(p.amount_paid or 0),
-            "due_amount": float(p.due_amount or 0)
+            "due_amount": float(p.due_amount or 0),
+            "date": p.payment_date.isoformat() if p.payment_date else "",
+            "payment_date": p.payment_date.isoformat() if p.payment_date else "",
+            "created_at": p_line_created_local.isoformat() if p_line_created_local else None,
+            "created_date": p_line_created_local.strftime("%Y-%m-%d") if p_line_created_local else "",
+            "created_time": p_line_created_local.strftime("%I:%M %p") if p_line_created_local else "",
         })
     final_receipts = []
     # Sort by recent first (assuming input was sorted, but we iterate dict. Python 3.7+ preserves insertion order)
@@ -338,6 +349,7 @@ def report_fee_consolidated(current_user):
             else:
                 trans_id = p.TransactionDetails or ""
 
+            p_line_created_local = to_local_time(p.created_at) if p.created_at else None
             line_items.append({
                 "sno": idx + 1,
                 "student_name": student_name,
@@ -360,7 +372,11 @@ def report_fee_consolidated(current_user):
                 "note": p.note or "",
                 "transaction_id": trans_id,
                 "date": p.payment_date.isoformat() if p.payment_date else "",
-                "time": to_local_time(p.created_at).strftime("%I:%M %p") if p.created_at else "",
+                "payment_date": p.payment_date.isoformat() if p.payment_date else "",
+                "time": p_line_created_local.strftime("%I:%M %p") if p_line_created_local else "",
+                "created_at": p_line_created_local.isoformat() if p_line_created_local else None,
+                "created_date": p_line_created_local.strftime("%Y-%m-%d") if p_line_created_local else "",
+                "created_time": p_line_created_local.strftime("%I:%M %p") if p_line_created_local else "",
                 "collected_by": p.collected_by_name or "",
                 "status": p.status or "A"
             })
@@ -961,7 +977,11 @@ def get_receipt_data(current_user, receipt_no):
             "admissionNo": student.admission_no,
             "branch": student.branch,
             "className": first.class_name, # Snapshot class from payment
-            "paymentDate": first.payment_date.isoformat(),
+            "paymentDate": first.payment_date.isoformat() if first.payment_date else "",
+            "payment_date": first.payment_date.isoformat() if first.payment_date else "",
+            "created_at": to_local_time(first.created_at).isoformat() if first.created_at else None,
+            "created_date": to_local_time(first.created_at).strftime("%Y-%m-%d") if first.created_at else "",
+            "created_time": to_local_time(first.created_at).strftime("%I:%M %p") if first.created_at else "",
             "paymentMode": first.payment_mode,
             "paymentNote": first.note,
             "transactionId": first.TransactionDetails or "",
@@ -1006,6 +1026,7 @@ def report_deleted_receipts(current_user):
         receipt_map = {}
         for p in payments:
             key = f"{p.branch}_{p.receipt_no}"
+            p_del_created_local = to_local_time(p.created_at) if p.created_at else None
             if key not in receipt_map:
                 receipt_map[key] = {
                     "receipt_no": p.receipt_no,
@@ -1017,6 +1038,11 @@ def report_deleted_receipts(current_user):
                     "amount_paid": 0.0,
                     "gross_amount": 0.0,
                     "date": p.payment_date.isoformat() if p.payment_date else "",
+                    "payment_date": p.payment_date.isoformat() if p.payment_date else "",
+                    "time": p_del_created_local.strftime("%I:%M %p") if p_del_created_local else "",
+                    "created_at": p_del_created_local.isoformat() if p_del_created_local else None,
+                    "created_date": p_del_created_local.strftime("%Y-%m-%d") if p_del_created_local else "",
+                    "created_time": p_del_created_local.strftime("%I:%M %p") if p_del_created_local else "",
                     "mode": p.payment_mode,
                     "collected_by": p.collected_by_name,
                     "deleted_by": users.get(p.updated_by, "Unknown"),

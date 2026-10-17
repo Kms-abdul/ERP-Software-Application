@@ -5,6 +5,28 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatReportBranch, getReportHeaderBranch } from '../utils/branchHelper';
 
+const formatDateDDMMYYYY = (dateStr: string | undefined | null): string => {
+    if (!dateStr) return '-';
+    try {
+        if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) return dateStr;
+        if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+            const datePart = dateStr.split('T')[0];
+            const [year, month, day] = datePart.split('-');
+            return `${day}-${month}-${year}`;
+        }
+        const date = new Date(dateStr);
+        if (!isNaN(date.getTime())) {
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}-${month}-${year}`;
+        }
+        return dateStr;
+    } catch {
+        return dateStr || '-';
+    }
+};
+
 const Pagination = ({ currentPage, totalPages, onPageChange, totalRecords, perPage }: any) => {
     if (totalPages <= 1) return null;
 
@@ -121,6 +143,8 @@ const DeletedReceiptsReport: React.FC = () => {
             'Fee Type': r.fee_type_str,
             'Amount': r.amount_paid,
             'Mode': r.mode,
+            'Payment Date': formatDateDDMMYYYY(r.date || r.payment_date),
+            'Created Date': formatDateDDMMYYYY(r.created_date || r.created_at),
             'Deleted By': r.deleted_by,
             'Deleted At': r.deleted_at,
             'Cancel Reason': r.cancel_reason
@@ -137,7 +161,7 @@ const DeletedReceiptsReport: React.FC = () => {
         doc.setFontSize(16);
         doc.text(`${getReportHeaderBranch()} - Deleted Receipts Report`, 14, 15);
 
-        const tableColumn = ["S.No", "Student Name", "Adm No.", "Class", "Branch", "Rcpt No", "Fee Type", "Amount", "Mode", "Deleted By", "Deleted At", "Reason"];
+        const tableColumn = ["S.No", "Student Name", "Adm No.", "Class", "Branch", "Rcpt No", "Fee Type", "Amount", "Mode", "Payment Date", "Created Date", "Deleted By", "Deleted At", "Reason"];
         const tableRows = filteredReceipts.map((r, idx) => [
             idx + 1,
             r.student_name,
@@ -148,6 +172,8 @@ const DeletedReceiptsReport: React.FC = () => {
             r.fee_type_str,
             r.amount_paid,
             r.mode,
+            formatDateDDMMYYYY(r.date || r.payment_date),
+            formatDateDDMMYYYY(r.created_date || r.created_at),
             r.deleted_by,
             r.deleted_at,
             r.cancel_reason
@@ -221,6 +247,8 @@ const DeletedReceiptsReport: React.FC = () => {
                                         <th className="px-3 py-2 text-left font-semibold">Fee Type</th>
                                         <th className="px-3 py-2 text-right font-semibold">Amount</th>
                                         <th className="px-3 py-2 text-left font-semibold">Mode</th>
+                                        <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Payment Date</th>
+                                        <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Created Date</th>
                                         <th className="px-3 py-2 text-left font-semibold">Deleted By</th>
                                         <th className="px-3 py-2 text-left font-semibold">Deleted At</th>
                                         <th className="px-3 py-2 text-left font-semibold">Cancel Reason</th>
@@ -240,6 +268,8 @@ const DeletedReceiptsReport: React.FC = () => {
                                                 <td className="px-3 py-2 truncate max-w-[150px]" title={r.fee_type_str}>{r.fee_type_str || '-'}</td>
                                                 <td className="px-3 py-2 text-right font-medium text-gray-800">₹{(r.amount_paid || 0).toLocaleString()}</td>
                                                 <td className="px-3 py-2">{r.mode}</td>
+                                                <td className="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">{formatDateDDMMYYYY(r.date || r.payment_date)}</td>
+                                                <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{formatDateDDMMYYYY(r.created_date || r.created_at)}</td>
                                                 <td className="px-3 py-2 font-semibold text-red-600">{r.deleted_by}</td>
                                                 <td className="px-3 py-2 text-xs text-gray-500">{r.deleted_at}</td>
                                                 <td className="px-3 py-2 text-xs truncate max-w-[200px] text-gray-600" title={r.cancel_reason}>{r.cancel_reason}</td>

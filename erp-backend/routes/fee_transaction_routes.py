@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from extensions import db, get_now, get_today
+from extensions import db, get_now, get_today, to_local_time
 from models import Student, StudentFee, FeePayment, Branch, FeeInstallment, Concession, ClassFeeStructure, StudentAcademicRecord, FeeType
 from helpers import token_required, require_academic_year, normalize_fee_title, assign_fee_to_student, require_editable_student, ensure_student_editable, has_global_branch_access, user_can_access_branch
 from services.sequence_service import SequenceService
@@ -423,6 +423,9 @@ def get_student_payment_history(current_user, student_id):
             "receipt_no": p.receipt_no,
             "academic_year": p.academic_year,
             "payment_date": p.payment_date.isoformat() if p.payment_date else None,
+            "created_at": to_local_time(p.created_at).isoformat() if p.created_at else None,
+            "created_date": to_local_time(p.created_at).strftime("%Y-%m-%d") if p.created_at else "",
+            "created_time": to_local_time(p.created_at).strftime("%I:%M %p") if p.created_at else "",
             "amount_paid": str(p.amount_paid),
             "concession_amount": str(p.concession_amount),
             "gross_amount": str(p.gross_amount),
@@ -1112,7 +1115,11 @@ def get_student_receipts(current_user, student_id):
                     "branch": p.branch,
                     "academic_year": p.academic_year,
                     "date": p.payment_date.strftime("%d-%m-%Y") if p.payment_date else None,
-                    "time": "",
+                    "payment_date": p.payment_date.strftime("%d-%m-%Y") if p.payment_date else None,
+                    "time": to_local_time(p.created_at).strftime("%I:%M %p") if p.created_at else "",
+                    "created_at": to_local_time(p.created_at).isoformat() if p.created_at else None,
+                    "created_date": to_local_time(p.created_at).strftime("%Y-%m-%d") if p.created_at else "",
+                    "created_time": to_local_time(p.created_at).strftime("%I:%M %p") if p.created_at else "",
                     "mode": p.payment_mode,
                     "transaction_id": p.TransactionDetails or "",
                     "cheque_no": p.cheque_no or "",
@@ -1132,7 +1139,10 @@ def get_student_receipts(current_user, student_id):
 
             # Time field (if model has created_at)
             if hasattr(p, 'created_at') and p.created_at and not grouped[rno]["time"]:
-                grouped[rno]["time"] = p.created_at.strftime("%H:%M")
+                grouped[rno]["time"] = to_local_time(p.created_at).strftime("%I:%M %p")
+                grouped[rno]["created_time"] = to_local_time(p.created_at).strftime("%I:%M %p")
+                grouped[rno]["created_date"] = to_local_time(p.created_at).strftime("%Y-%m-%d")
+                grouped[rno]["created_at"] = to_local_time(p.created_at).isoformat()
 
             g = grouped[rno]
             g["amount_paid"] += float(p.amount_paid or 0)
