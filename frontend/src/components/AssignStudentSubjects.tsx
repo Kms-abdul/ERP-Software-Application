@@ -6,6 +6,7 @@ interface Student {
     admission_no: string;
     name: string;
     roll_number: any;
+    category?: string;
 } 
 
 interface Subject {
@@ -20,6 +21,7 @@ const AssignStudentSubjects: React.FC = () => {
     const [branch, setBranch] = useState("");
     const [selectedClass, setSelectedClass] = useState("");
     const [selectedSection, setSelectedSection] = useState("");
+    const [selectedCategory, setSelectedCategory] = useState("");
     const [subjectType, setSubjectType] = useState("Academic");
 
     // Options
@@ -112,6 +114,7 @@ const AssignStudentSubjects: React.FC = () => {
                 subject_type: subjectType
             });
             if (selectedSection) params.append("section_id", selectedSection);
+            if (selectedCategory) params.append("category", selectedCategory);
 
             const res = await api.get(`/academics/assignment-data?${params.toString()}`);
 
@@ -160,7 +163,7 @@ const AssignStudentSubjects: React.FC = () => {
             // Debounce slightly or just fetch? 
             fetchData();
         }
-    }, [selectedClass, selectedSection, subjectType, academicYear, branch]);
+    }, [selectedClass, selectedSection, selectedCategory, subjectType, academicYear, branch]);
 
 
     const handleToggle = (studentId: number, subjectId: number) => {
@@ -250,7 +253,7 @@ const AssignStudentSubjects: React.FC = () => {
             <h2 className="text-2xl font-bold mb-6 text-gray-800">Assign Student-Subjects</h2>
 
             {/* Top Bar / Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6 p-4 bg-gray-50 rounded-lg shadow-sm border">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6 p-4 bg-gray-50 rounded-lg shadow-sm border">
                 {/* Academic Year (Read Only) */}
                 <div className="flex flex-col">
                     <label className="text-sm font-semibold text-gray-600 mb-1">Academic Year</label>
@@ -295,6 +298,20 @@ const AssignStudentSubjects: React.FC = () => {
                         {sectionList.map((sec) => (
                             <option key={sec} value={sec}>{sec}</option>
                         ))}
+                    </select>
+                </div>
+
+                {/* Category Dropdown */}
+                <div className="flex flex-col">
+                    <label className="text-sm font-semibold text-gray-600 mb-1">Category</label>
+                    <select
+                        className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 outline-none"
+                        value={selectedCategory}
+                        onChange={(e) => setSelectedCategory(e.target.value)}
+                    >
+                        <option value="">Select Category</option>
+                        <option value="Hifz">Hifz</option>
+                        <option value="Hifz + Nazira">Hifz + Nazira</option>
                     </select>
                 </div>
 
@@ -345,6 +362,7 @@ const AssignStudentSubjects: React.FC = () => {
                                     <th className="py-3 px-4 text-left w-48 sticky left-0 z-10 bg-[#1f2937]">Student Name</th>
                                     <th className="py-3 px-4 text-left w-24">Roll No</th>
                                     <th className="py-3 px-4 text-left w-32">Adm No</th>
+                                    <th className="py-3 px-4 text-left min-w-[140px]">Academic Category</th>
                                     {subjects.map(sub => (
                                         <th key={sub.subject_id} className="py-3 px-4 text-center min-w-[100px]">
                                             <div className="flex flex-col items-center gap-2">
@@ -380,6 +398,15 @@ const AssignStudentSubjects: React.FC = () => {
                                         </td>
                                         <td className="py-2 px-4">{student.roll_number}</td>
                                         <td className="py-2 px-4">{student.admission_no}</td>
+                                        <td className="py-2 px-4">
+                                            {student.category ? (
+                                                <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium whitespace-nowrap">
+                                                    {student.category}
+                                                </span>
+                                            ) : (
+                                                <span className="text-gray-400 text-xs">-</span>
+                                            )}
+                                        </td>
 
                                         {subjects.map(sub => {
                                             const isChecked = assignmentMap[student.student_id]?.[sub.subject_id] || false;

@@ -25,6 +25,10 @@ export interface Receipt {
     note?: string;
     collected_by?: string;
     date?: string;
+    payment_date?: string;
+    created_at?: string;
+    created_date?: string;
+    created_time?: string;
     time?: string;
     transaction_id?: string;
 }
@@ -388,7 +392,8 @@ const FullReceiptsTable: React.FC<{
                             <th className="px-3 py-2 text-left font-semibold">Mode</th>
                             <th className="px-3 py-2 text-left font-semibold">Trans ID</th>
                             {showAllColumns && <th className="px-3 py-2 text-left font-semibold">Note</th>}
-                            <th className="px-3 py-2 text-left font-semibold">Date/Time</th>
+                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Payment Date</th>
+                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Created Date</th>
                             <th className="px-3 py-2 text-left font-semibold">Taken By</th>
                             <th className="px-3 py-2 text-center font-semibold">Action</th>
                         </tr>
@@ -422,8 +427,12 @@ const FullReceiptsTable: React.FC<{
                                             <div className="truncate" title={r.transaction_id}>{r.transaction_id || '-'}</div>
                                         )}
                                     </td>                                {showAllColumns && <td className="px-3 py-2 text-xs truncate max-w-[150px]" title={r.note}>{r.note || '-'}</td>}
-                                    <td className="px-3 py-2 text-xs text-gray-500">
-                                        {r.date} <br /> {r.time}
+                                    <td className="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">
+                                        {formatDateDDMMYYYY(r.date || r.payment_date)}
+                                    </td>
+                                    <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
+                                        {formatDateDDMMYYYY(r.created_date || r.created_at)}
+                                        {r.time ? <><br /><span className="text-gray-400 text-[11px]">{r.time}</span></> : null}
                                     </td>
                                     <td className="px-3 py-2">{r.collected_by}</td>
                                     <td className="px-3 py-2 text-center">
@@ -440,7 +449,7 @@ const FullReceiptsTable: React.FC<{
                         {/* Add empty rows to maintain height */}
                         {currentReceipts.length < rowsPerPage && Array.from({ length: rowsPerPage - currentReceipts.length }).map((_, i) => (
                             <tr key={`empty-${i}`} className="h-[45px]">
-                                <td colSpan={18}>&nbsp;</td>
+                                <td colSpan={showAllColumns ? 19 : 14}>&nbsp;</td>
                             </tr>
                         ))}
                     </tbody>
@@ -494,8 +503,9 @@ const downloadExcelReport = (receipts: any[], filename: string) => {
                     "Mode": r.mode,
                     "Remarks": r.note || '-',
                     "TransactionID": transId,
-                    "Date": formatDateDDMMYYYY(r.date),
-                    "Time": r.time || '',
+                    "PaymentDate": formatDateDDMMYYYY(item.payment_date || item.date || r.date || r.payment_date),
+                    "CreatedDate": formatDateDDMMYYYY(item.created_date || item.created_at || r.created_date || r.created_at),
+                    "Time": item.created_time || item.time || r.created_time || r.time || '',
                     "TakenBy": r.collected_by
                 });
             });
@@ -519,8 +529,9 @@ const downloadExcelReport = (receipts: any[], filename: string) => {
                 "Mode": r.mode,
                 "Remarks": r.note || '-',
                 "TransactionID": transId,
-                "Date": formatDateDDMMYYYY(r.date),
-                "Time": r.time || '',
+                "PaymentDate": formatDateDDMMYYYY(r.date || r.payment_date),
+                "CreatedDate": formatDateDDMMYYYY(r.created_date || r.created_at),
+                "Time": r.created_time || r.time || '',
                 "TakenBy": r.collected_by
             });
         }
@@ -555,7 +566,7 @@ const downloadPDFReport = (receipts: any[], title: string, filename: string) => 
 
     const tableColumn = [
         "Student", "Adm No", "Class", "Branch", "Receipt",
-        "Fee Type", "Paid", "Due", "Mode", "Trans ID", "Date", "Taken By"
+        "Fee Type", "Paid", "Due", "Mode", "Trans ID", "Payment Date", "Created Date", "Taken By"
     ];
 
     const tableRows = receipts.map((r: any) => ([
@@ -571,7 +582,8 @@ const downloadPDFReport = (receipts: any[], title: string, filename: string) => 
         r.mode === 'Cheque'
             ? `Chq: ${r.cheque_no || '-'} | ${r.bank_name || '-'} | ${formatDateDDMMYYYY(r.cheque_date)}`
             : (r.transaction_id || '-'),
-        `${formatDateDDMMYYYY(r.date)} ${r.time || ''}`,
+        formatDateDDMMYYYY(r.date || r.payment_date),
+        `${formatDateDDMMYYYY(r.created_date || r.created_at)} ${r.time || ''}`.trim() || '-',
         r.collected_by
     ]));
 
@@ -601,6 +613,7 @@ export const TodayCollection: React.FC<ReportProps> = ({ onViewReceipt }) => {
     const [selectedFeeType, setSelectedFeeType] = useState('All');
     const [selectedMode, setSelectedMode] = useState('All');
     const [selectedCollector, setSelectedCollector] = useState('All');
+    const [selectedDateType, setSelectedDateType] = useState('either');
     const [collectors, setCollectors] = useState<string[]>([]);
 
     const sections = useClassSections(selectedClass);
@@ -638,7 +651,7 @@ export const TodayCollection: React.FC<ReportProps> = ({ onViewReceipt }) => {
         loadInitialData();
     }, []);
 
-    const fetchReport = async () => {
+    const fetchReport = async (dateTypeOverride?: string) => {
         try {
             setLoading(true);
             // Fetch BROAD data (All) and filter locally as requested
@@ -647,7 +660,8 @@ export const TodayCollection: React.FC<ReportProps> = ({ onViewReceipt }) => {
                 fee_type: 'All',
                 section: 'All',
                 mode: 'All',
-                collected_by: 'All'
+                collected_by: 'All',
+                date_type: dateTypeOverride || selectedDateType
             });
             const res = await api.get(`/reports/fees/today?${params.toString()}`);
             setRawData(res.data);
@@ -740,6 +754,24 @@ export const TodayCollection: React.FC<ReportProps> = ({ onViewReceipt }) => {
                         ))}
                     </select>
                 </div>
+
+                {/* Date Filter By */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date Filter By</label>
+                    <select
+                        value={selectedDateType}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            setSelectedDateType(val);
+                            fetchReport(val);
+                        }}
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border p-2"
+                    >
+                        <option value="either">Both (Payment or Created Date)</option>
+                        <option value="payment_date">Payment Date Only</option>
+                        <option value="created_at">Receipt Created Date Only</option>
+                    </select>
+                </div>
             </FilterContainer>
 
             {/* Actions Row */}
@@ -806,6 +838,7 @@ export const DailyReport: React.FC<ReportProps> = ({ onViewReceipt, forcedStatus
     const [selectedFeeType, setSelectedFeeType] = useState('All');
     const [selectedMode, setSelectedMode] = useState('All');
     const [selectedCollector, setSelectedCollector] = useState('All');
+    const [selectedDateType, setSelectedDateType] = useState('either');
     const [collectors, setCollectors] = useState<string[]>([]);
 
     const sections = useClassSections(selectedClass);
@@ -863,7 +896,8 @@ export const DailyReport: React.FC<ReportProps> = ({ onViewReceipt, forcedStatus
                 section: 'All',
                 fee_type: 'All',
                 mode: 'All',
-                collected_by: 'All'
+                collected_by: 'All',
+                date_type: selectedDateType
             });
             if (forcedStatus) params.append('status', forcedStatus);
             if (forcedConcession) params.append('has_concession', 'true');
@@ -990,6 +1024,20 @@ export const DailyReport: React.FC<ReportProps> = ({ onViewReceipt, forcedStatus
                         {paymentModes.map(m => (
                             <option key={m} value={m}>{m === 'All' ? 'All Modes' : m}</option>
                         ))}
+                    </select>
+                </div>
+
+                {/* Date Filter By */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date Filter By</label>
+                    <select
+                        value={selectedDateType}
+                        onChange={(e) => setSelectedDateType(e.target.value)}
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border p-2"
+                    >
+                        <option value="either">Both (Payment or Created Date)</option>
+                        <option value="payment_date">Payment Date Only</option>
+                        <option value="created_at">Receipt Created Date Only</option>
                     </select>
                 </div>
             </FilterContainer>
@@ -2775,6 +2823,16 @@ export const SearchStudentReport: React.FC<ReportProps> = ({ onViewReceipt }) =>
                         <StatCard label="Edit Access" value={isAdmin ? 'Admin (Allowed)' : 'View Only'} color={isAdmin ? 'green' : 'orange'} />
                     </div>
 
+                    <div className="flex justify-end px-4 mt-2">
+                        <button
+                            onClick={() => downloadExcelReport(receipts, `Student_Receipts_${selectedStudent.admission_no || selectedStudent.name}`)}
+                            className="bg-white border border-slate-200 text-green-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-50 flex items-center gap-1.5 shadow-sm transition-colors"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                            Export Excel
+                        </button>
+                    </div>
+
                     {/* Receipts Table - Custom with Edit Button */}
                     {receipts.length === 0 ? (
                         <div className="bg-red-50 text-red-500 text-center py-8 border rounded mt-4 mx-4 font-medium">
@@ -2787,7 +2845,8 @@ export const SearchStudentReport: React.FC<ReportProps> = ({ onViewReceipt }) =>
                                     <tr>
                                         <th className="px-3 py-2 text-left font-semibold">S.No</th>
                                         <th className="px-3 py-2 text-left font-semibold">Rcpt No</th>
-                                        <th className="px-3 py-2 text-left font-semibold">Date/Time</th>
+                                        <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Payment Date</th>
+                                        <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Created Date</th>
                                         <th className="px-3 py-2 text-left font-semibold">Fee Type</th>
                                         <th className="px-3 py-2 text-right font-semibold">Paid</th>
                                         <th className="px-3 py-2 text-right font-semibold">Due</th>
@@ -2802,9 +2861,12 @@ export const SearchStudentReport: React.FC<ReportProps> = ({ onViewReceipt }) =>
                                         <tr key={idx} className="hover:bg-gray-50">
                                             <td className="px-3 py-2 text-gray-500">{idx + 1}</td>
                                             <td className="px-3 py-2 font-medium text-blue-700">{r.receipt_no}</td>
-                                            <td className="px-3 py-2 text-xs text-gray-600">
-                                                {formatDateDDMMYYYY(r.date)}<br />
-                                                <span className="text-gray-400">{r.time}</span>
+                                            <td className="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">
+                                                {formatDateDDMMYYYY(r.date || r.payment_date)}
+                                            </td>
+                                            <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
+                                                {formatDateDDMMYYYY(r.created_date || r.created_at)}<br />
+                                                <span className="text-gray-400 text-[11px]">{r.time}</span>
                                             </td>
                                             <td className="px-3 py-2 max-w-[200px] truncate" title={r.fee_type_str}>{r.fee_type_str || '-'}</td>
                                             <td className="px-3 py-2 text-right font-bold">₹{(r.amount_paid || r.amount || 0).toLocaleString()}</td>
@@ -2852,7 +2914,7 @@ export const SearchStudentReport: React.FC<ReportProps> = ({ onViewReceipt }) =>
                                 </tbody>
                                 <tfoot className="bg-gray-100 font-bold">
                                     <tr>
-                                        <td colSpan={4} className="px-3 py-2 text-right">Total:</td>
+                                        <td colSpan={5} className="px-3 py-2 text-right">Total:</td>
                                         <td className="px-3 py-2 text-right">₹{totalCollected.toLocaleString()}</td>
                                         <td colSpan={5}></td>
                                     </tr>
@@ -3018,6 +3080,7 @@ export const ConsolidateReport: React.FC<ReportProps> = ({ onViewReceipt }) => {
     const [selectedSection, setSelectedSection] = useState('All');
     const [selectedFeeType, setSelectedFeeType] = useState('All');
     const [selectedMode, setSelectedMode] = useState('All');
+    const [selectedDateType, setSelectedDateType] = useState('either');
     const [rawData, setRawData] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -3079,6 +3142,7 @@ export const ConsolidateReport: React.FC<ReportProps> = ({ onViewReceipt }) => {
                 section: selectedSection,
                 fee_type: selectedFeeType,
                 mode: selectedMode,
+                date_type: selectedDateType
             });
             const res = await api.get(`/reports/fees/consolidated?${params.toString()}`);
             setRawData(res.data);
@@ -3215,6 +3279,20 @@ export const ConsolidateReport: React.FC<ReportProps> = ({ onViewReceipt }) => {
                             ))}
                         </select>
                     </div>
+
+                    {/* Date Filter By */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Date Filter By</label>
+                        <select
+                            value={selectedDateType}
+                            onChange={(e) => setSelectedDateType(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 sm:text-sm border p-2"
+                        >
+                            <option value="either">Both (Payment or Created Date)</option>
+                            <option value="payment_date">Payment Date Only</option>
+                            <option value="created_at">Receipt Created Date Only</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -3318,7 +3396,8 @@ export const ConsolidateReport: React.FC<ReportProps> = ({ onViewReceipt }) => {
                                             <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mode</th>
                                             <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Trans ID</th>
                                             <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Note</th>
-                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Date/Time</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Payment Date</th>
+                                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Created Date</th>
                                             <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Taken By</th>
                                             <th className="px-3 py-2 text-center font-semibold whitespace-nowrap">Action</th>
                                         </tr>
@@ -3357,8 +3436,12 @@ export const ConsolidateReport: React.FC<ReportProps> = ({ onViewReceipt }) => {
                                                         )}
                                                     </td>
                                                     <td className="px-3 py-2 text-xs text-gray-500 max-w-[120px] truncate" title={r.note}>{r.note || '-'}</td>
+                                                    <td className="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">
+                                                        {formatDateDDMMYYYY(r.date || r.payment_date)}
+                                                    </td>
                                                     <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
-                                                        {formatDateDDMMYYYY(r.date)} <br /> {r.time}
+                                                        {formatDateDDMMYYYY(r.created_date || r.created_at)}
+                                                        {r.time ? <><br /><span className="text-gray-400 text-[11px]">{r.time}</span></> : null}
                                                     </td>
                                                     <td className="px-3 py-2 whitespace-nowrap text-gray-600">{r.collected_by || '-'}</td>
                                                     <td className="px-3 py-2 text-center whitespace-nowrap">
@@ -3382,7 +3465,7 @@ export const ConsolidateReport: React.FC<ReportProps> = ({ onViewReceipt }) => {
                                             <td className="px-3 py-3 text-right">₹{currentItems.reduce((s: number, r: any) => s + (r.net_payable || 0), 0).toLocaleString('en-IN')}</td>
                                             <td className="px-3 py-3 text-right text-green-700">₹{currentItems.reduce((s: number, r: any) => s + (r.amount_paid || 0), 0).toLocaleString('en-IN')}</td>
                                             <td className="px-3 py-3 text-right text-red-500">₹{currentItems.reduce((s: number, r: any) => s + (r.due_amount || 0), 0).toLocaleString('en-IN')}</td>
-                                            <td colSpan={6} />
+                                            <td colSpan={7} />
                                         </tr>
                                         <tr className="border-t border-slate-300">
                                             <td colSpan={8} className="px-3 py-3 text-right">Grand Total ({receipts.length} receipts) →</td>
@@ -3391,7 +3474,7 @@ export const ConsolidateReport: React.FC<ReportProps> = ({ onViewReceipt }) => {
                                             <td className="px-3 py-3 text-right">₹{receipts.reduce((s: number, r: any) => s + (r.net_payable || 0), 0).toLocaleString('en-IN')}</td>
                                             <td className="px-3 py-3 text-right text-green-700">₹{totalPaid.toLocaleString('en-IN')}</td>
                                             <td className="px-3 py-3 text-right text-red-500">₹{totalDue.toLocaleString('en-IN')}</td>
-                                            <td colSpan={6} />
+                                            <td colSpan={7} />
                                         </tr>
                                     </tfoot>
                                 </table>

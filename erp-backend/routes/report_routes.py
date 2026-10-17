@@ -2,8 +2,8 @@ from flask import Blueprint, jsonify, request, current_app
 from extensions import db, to_local_time
 from models import FeePayment, Student, StudentFee, RemittanceMaster, Branch
 from helpers import token_required, require_academic_year, has_global_branch_access, user_can_access_branch
-from datetime import date, datetime
-from sqlalchemy import func, or_, extract
+from datetime import date, datetime, time
+from sqlalchemy import func, or_, and_, extract
 from sqlalchemy.orm import selectinload
 
 def consolidate_receipts(payments):
@@ -18,6 +18,7 @@ def consolidate_receipts(payments):
         key = f"{p.branch}_{p.receipt_no}"
 
         if key not in receipt_map:
+            p_created_local = to_local_time(p.created_at) if p.created_at else None
             receipt_map[key] = {
                 "receipt_no": p.receipt_no,
                 "student_name": (p.student.first_name if p.student else "Unknown") + " " + (p.student.last_name if p.student and p.student.last_name else ""),
@@ -32,8 +33,12 @@ def consolidate_receipts(payments):
                 "net_payable": 0.0,
                 "amount_paid": 0.0,
                 "due_amount": 0.0,
-                "date": p.payment_date.isoformat(),
-                "time": to_local_time(p.created_at).strftime("%I:%M %p") if p.created_at else "",
+                "date": p.payment_date.isoformat() if p.payment_date else "",
+                "payment_date": p.payment_date.isoformat() if p.payment_date else "",
+                "time": p_created_local.strftime("%I:%M %p") if p_created_local else "",
+                "created_at": p_created_local.isoformat() if p_created_local else None,
+                "created_date": p_created_local.strftime("%Y-%m-%d") if p_created_local else "",
+                "created_time": p_created_local.strftime("%I:%M %p") if p_created_local else "",
                 "mode": p.payment_mode,
                 "note": p.note,
                 "transaction_id": p.TransactionDetails,
@@ -58,6 +63,7 @@ def consolidate_receipts(payments):
         f_name = f"{p.fee_type or ''} {p.installment_name or ''}".strip()
         if f_name and f_name not in item["fee_types"]:
             item["fee_types"].append(f_name)
+        p_line_created_local = to_local_time(p.created_at) if p.created_at else None
         item["line_items"].append({
             "fee_type": p.fee_type,
             "installment_name": p.installment_name,
@@ -66,7 +72,12 @@ def consolidate_receipts(payments):
             "concession": float(p.concession_amount or 0),
             "net_payable": float(p.net_payable or 0),
             "amount_paid": float(p.amount_paid or 0),
-            "due_amount": float(p.due_amount or 0)
+            "due_amount": float(p.due_amount or 0),
+            "date": p.payment_date.isoformat() if p.payment_date else "",
+            "payment_date": p.payment_date.isoformat() if p.payment_date else "",
+            "created_at": p_line_created_local.isoformat() if p_line_created_local else None,
+            "created_date": p_line_created_local.strftime("%Y-%m-%d") if p_line_created_local else "",
+            "created_time": p_line_created_local.strftime("%I:%M %p") if p_line_created_local else "",
         })
     final_receipts = []
     # Sort by recent first (assuming input was sorted, but we iterate dict. Python 3.7+ preserves insertion order)
@@ -94,9 +105,23 @@ def report_fee_today(current_user):
          target_branch = current_user.branch
 
     today = date.today()
+    start_dt = datetime.combine(today, time.min)
+    end_dt = datetime.combine(today, time.max)
     
     try:
-        query = FeePayment.query.options(selectinload(FeePayment.student)).filter(FeePayment.payment_date == today)
+        date_type = request.args.get('date_type', 'either')
+        query = FeePayment.query.options(selectinload(FeePayment.student))
+        if date_type == 'payment_date':
+            query = query.filter(FeePayment.payment_date == today)
+        elif date_type == 'created_at':
+            query = query.filter(FeePayment.created_at >= start_dt, FeePayment.created_at <= end_dt)
+        else:
+            query = query.filter(
+                or_(
+                    FeePayment.payment_date == today,
+                    and_(FeePayment.created_at >= start_dt, FeePayment.created_at <= end_dt)
+                )
+            )
         query = query.filter(FeePayment.academic_year == h_year)
         
         if target_branch and target_branch not in ['All', 'AllBranches']:
@@ -159,8 +184,22 @@ def report_fee_daily(current_user):
         else:
              return jsonify({"error": "Date range (start_date, end_date) or specific date required"}), 400
         
-        query = FeePayment.query.options(selectinload(FeePayment.student)).filter(FeePayment.payment_date >= target_start)
-        query = query.filter(FeePayment.payment_date <= target_end)
+        start_dt = datetime.combine(target_start, time.min)
+        end_dt = datetime.combine(target_end, time.max)
+        date_type = request.args.get('date_type', 'either')
+        
+        query = FeePayment.query.options(selectinload(FeePayment.student))
+        if date_type == 'payment_date':
+            query = query.filter(FeePayment.payment_date >= target_start, FeePayment.payment_date <= target_end)
+        elif date_type == 'created_at':
+            query = query.filter(FeePayment.created_at >= start_dt, FeePayment.created_at <= end_dt)
+        else:
+            query = query.filter(
+                or_(
+                    and_(FeePayment.payment_date >= target_start, FeePayment.payment_date <= target_end),
+                    and_(FeePayment.created_at >= start_dt, FeePayment.created_at <= end_dt)
+                )
+            )
         query = query.filter(FeePayment.academic_year == h_year)
         
         if target_branch and target_branch not in ['All', 'AllBranches']:
@@ -278,9 +317,22 @@ def report_fee_consolidated(current_user):
         mode_filter = request.args.get('mode', 'All')
         status_filter = request.args.get('status', 'A')
 
+        start_dt = datetime.combine(target_start, time.min)
+        end_dt = datetime.combine(target_end, time.max)
+        date_type = request.args.get('date_type', 'either')
+
         query = FeePayment.query.options(selectinload(FeePayment.student))
-        query = query.filter(FeePayment.payment_date >= target_start)
-        query = query.filter(FeePayment.payment_date <= target_end)
+        if date_type == 'payment_date':
+            query = query.filter(FeePayment.payment_date >= target_start, FeePayment.payment_date <= target_end)
+        elif date_type == 'created_at':
+            query = query.filter(FeePayment.created_at >= start_dt, FeePayment.created_at <= end_dt)
+        else:
+            query = query.filter(
+                or_(
+                    and_(FeePayment.payment_date >= target_start, FeePayment.payment_date <= target_end),
+                    and_(FeePayment.created_at >= start_dt, FeePayment.created_at <= end_dt)
+                )
+            )
 
         # Academic year filter
         if selected_years:
@@ -338,6 +390,7 @@ def report_fee_consolidated(current_user):
             else:
                 trans_id = p.TransactionDetails or ""
 
+            p_line_created_local = to_local_time(p.created_at) if p.created_at else None
             line_items.append({
                 "sno": idx + 1,
                 "student_name": student_name,
@@ -360,7 +413,11 @@ def report_fee_consolidated(current_user):
                 "note": p.note or "",
                 "transaction_id": trans_id,
                 "date": p.payment_date.isoformat() if p.payment_date else "",
-                "time": to_local_time(p.created_at).strftime("%I:%M %p") if p.created_at else "",
+                "payment_date": p.payment_date.isoformat() if p.payment_date else "",
+                "time": p_line_created_local.strftime("%I:%M %p") if p_line_created_local else "",
+                "created_at": p_line_created_local.isoformat() if p_line_created_local else None,
+                "created_date": p_line_created_local.strftime("%Y-%m-%d") if p_line_created_local else "",
+                "created_time": p_line_created_local.strftime("%I:%M %p") if p_line_created_local else "",
                 "collected_by": p.collected_by_name or "",
                 "status": p.status or "A"
             })
@@ -408,10 +465,26 @@ def report_fee_monthly(current_user):
         if not month or not year:
             return jsonify({"error": "Month and Year required"}), 400
             
-        query = FeePayment.query.options(selectinload(FeePayment.student)).filter(
-            FeePayment.payment_month == int(month),
-            FeePayment.payment_year == int(year)
-        )
+        m_int = int(month)
+        y_int = int(year)
+        import calendar
+        _, last_day = calendar.monthrange(y_int, m_int)
+        m_start_dt = datetime.combine(date(y_int, m_int, 1), time.min)
+        m_end_dt = datetime.combine(date(y_int, m_int, last_day), time.max)
+            
+        date_type = request.args.get('date_type', 'either')
+        query = FeePayment.query.options(selectinload(FeePayment.student))
+        if date_type == 'payment_date':
+            query = query.filter(FeePayment.payment_month == m_int, FeePayment.payment_year == y_int)
+        elif date_type == 'created_at':
+            query = query.filter(FeePayment.created_at >= m_start_dt, FeePayment.created_at <= m_end_dt)
+        else:
+            query = query.filter(
+                or_(
+                    and_(FeePayment.payment_month == m_int, FeePayment.payment_year == y_int),
+                    and_(FeePayment.created_at >= m_start_dt, FeePayment.created_at <= m_end_dt)
+                )
+            )
         query = query.filter(FeePayment.academic_year == h_year)
         
         if target_branch and target_branch not in ['All', 'AllBranches']:
@@ -961,7 +1034,11 @@ def get_receipt_data(current_user, receipt_no):
             "admissionNo": student.admission_no,
             "branch": student.branch,
             "className": first.class_name, # Snapshot class from payment
-            "paymentDate": first.payment_date.isoformat(),
+            "paymentDate": first.payment_date.isoformat() if first.payment_date else "",
+            "payment_date": first.payment_date.isoformat() if first.payment_date else "",
+            "created_at": to_local_time(first.created_at).isoformat() if first.created_at else None,
+            "created_date": to_local_time(first.created_at).strftime("%Y-%m-%d") if first.created_at else "",
+            "created_time": to_local_time(first.created_at).strftime("%I:%M %p") if first.created_at else "",
             "paymentMode": first.payment_mode,
             "paymentNote": first.note,
             "transactionId": first.TransactionDetails or "",
@@ -1006,6 +1083,7 @@ def report_deleted_receipts(current_user):
         receipt_map = {}
         for p in payments:
             key = f"{p.branch}_{p.receipt_no}"
+            p_del_created_local = to_local_time(p.created_at) if p.created_at else None
             if key not in receipt_map:
                 receipt_map[key] = {
                     "receipt_no": p.receipt_no,
@@ -1017,6 +1095,11 @@ def report_deleted_receipts(current_user):
                     "amount_paid": 0.0,
                     "gross_amount": 0.0,
                     "date": p.payment_date.isoformat() if p.payment_date else "",
+                    "payment_date": p.payment_date.isoformat() if p.payment_date else "",
+                    "time": p_del_created_local.strftime("%I:%M %p") if p_del_created_local else "",
+                    "created_at": p_del_created_local.isoformat() if p_del_created_local else None,
+                    "created_date": p_del_created_local.strftime("%Y-%m-%d") if p_del_created_local else "",
+                    "created_time": p_del_created_local.strftime("%I:%M %p") if p_del_created_local else "",
                     "mode": p.payment_mode,
                     "collected_by": p.collected_by_name,
                     "deleted_by": users.get(p.updated_by, "Unknown"),
