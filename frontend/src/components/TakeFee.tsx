@@ -624,7 +624,7 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
             return;
         }
 
-        const confirmPayment = window.confirm( 'Are you sure you want to collect ₹' + payable + ' from ' + selectedStudent.name + '?'
+        const confirmPayment = window.confirm('Are you sure you want to collect ₹' + payable + ' from ' + selectedStudent.name + '?'
         )
 
         if (!confirmPayment) return;
@@ -777,7 +777,7 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                             <option key={section} value={section}>{section}</option>
                                         ))}
                                     </select>
-                                    
+
                                 </div>
                                 <div>
                                     <select
@@ -793,19 +793,19 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                         ))}
                                     </select>
                                     <div className="w-64">
-                                    <select
-                                        value={selectedFeeType}
-                                        onChange={handleFeeTypeChange}
-                                        disabled={!selectedStudent}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500 text-sm"
-                                    >
-                                        <option value="">-- Select Fee Type --</option>
-                                        {feeTypes.map(ft => (
-                                            <option key={ft.id} value={ft.id}>
-                                                {ft.fee_type}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        <select
+                                            value={selectedFeeType}
+                                            onChange={handleFeeTypeChange}
+                                            disabled={!selectedStudent}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500 text-sm"
+                                        >
+                                            <option value="">-- Select Fee Type --</option>
+                                            {feeTypes.map(ft => (
+                                                <option key={ft.id} value={ft.id}>
+                                                    {ft.fee_type}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
                                 </div>
                                 <div className="flex items-center space-x-2">
@@ -1060,9 +1060,18 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                         <input
                                             type="date"
                                             value={paymentDate}
+                                            max={new Date().toISOString().split('T')[0]}
                                             //readOnly
                                             disabled={false}
-                                            onChange={e => setPaymentDate(e.target.value)}
+                                            onChange={e => {
+                                                const today = new Date().toISOString().split('T')[0];
+                                                if (e.target.value > today) {
+                                                    alert('Future date is not allowed. Please select today or a past date.');
+                                                    setPaymentDate(today);
+                                                    return;
+                                                }
+                                                setPaymentDate(e.target.value);
+                                            }}
                                             className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500"
                                         />
                                     </div>

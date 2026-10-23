@@ -419,7 +419,7 @@ def create_remittance(current_user):
                 "denominations": denoms_out
             }
         }), 201
-    except Exception:
+    except Exception as e:
         db.session.rollback()
         if attachment_rel_path:
             try:
@@ -427,7 +427,10 @@ def create_remittance(current_user):
             except Exception:
                 pass
         current_app.logger.exception("Error creating remittance")
-        return jsonify({"error": "Could not create the remittance. Contact the administrator."}), 500
+        # TEMPORARY DEBUG: remove after diagnosis (exposes internal details)
+        return jsonify({
+            "error": f"Could not create the remittance. [DEBUG] {type(e).__name__}: {str(e)[:500]}"
+        }), 500
 
 @remittance_bp.route('', methods=['GET'])
 @token_required
