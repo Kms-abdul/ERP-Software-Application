@@ -157,23 +157,41 @@ class SequenceService:
     def generate_remittance_number(branch_id, academic_year_id):
         """
         Generates next Remittance Number with Branch Code: REM-{BRANCH_CODE}-{YYYY}-{0001}
+        Self-healing: never issues a number at or below the highest existing one
+        for the same prefix + year (counters are per academic year, but the
+        number format uses the calendar year, so they can otherwise collide).
         """
+        from models import RemittanceMaster  # local import to avoid circular imports
+
         seq = SequenceService._get_locked_sequence(branch_id, academic_year_id)
         if not seq:
             seq = SequenceService.get_or_create_sequence(branch_id, academic_year_id)
-        
+
         if getattr(seq, "last_remittance_no", None) is None:
             seq.last_remittance_no = 0
-            
-        seq.last_remittance_no += 1
-        
-        year_str = datetime.now().strftime("%Y")
+
         prefix = getattr(seq, "remittance_prefix", "REM") or "REM"
-        
         # If prefix is still default 'REM', upgrade it to include branch_code to ensure cross-branch uniqueness
         if prefix == "REM":
             branch = Branch.query.get(branch_id)
             prefix = f"REM-{branch.branch_code.strip()}" if branch and branch.branch_code else f"REM-B{branch_id}"
             seq.remittance_prefix = prefix
-        
-        return f"{prefix}-{year_str}-{seq.last_remittance_no:04d}"
+
+        year_str = datetime.now().strftime("%Y")
+        base = f"{prefix}-{year_str}-"
+
+        # Find the highest number already used for this prefix + year
+        max_existing = 0
+        existing = (
+            RemittanceMaster.query
+            .with_entities(RemittanceMaster.remittance_no)
+            .filter(RemittanceMaster.remittance_no.like(f"{base}%"))
+            .all()
+        )
+        for (r_no,) in existing:
+            tail = r_no[len(base):]
+            if tail.isdigit():
+                max_existing = max(max_existing, int(tail))
+
+        seq.last_remittance_no = max(seq.last_remittance_no, max_existing) + 1
+        return f"{base}{seq.last_remittance_no:04d}"

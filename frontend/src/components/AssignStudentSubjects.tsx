@@ -7,7 +7,7 @@ interface Student {
     name: string;
     roll_number: any;
     category?: string;
-} 
+}
 
 interface Subject {
     subject_id: number;
