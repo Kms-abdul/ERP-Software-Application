@@ -28,6 +28,8 @@ def ensure_remittance_columns():
             db.session.execute(text("ALTER TABLE remittance_master ADD COLUMN account_number VARCHAR(100) NULL"))
         if 'reference_no' not in columns:
             db.session.execute(text("ALTER TABLE remittance_master ADD COLUMN reference_no VARCHAR(100) NULL"))
+        if 'academic_year' not in columns:
+            db.session.execute(text("ALTER TABLE remittance_master ADD COLUMN academic_year VARCHAR(20) NULL"))
         db.session.commit()
     except Exception as e:
         db.session.rollback()
@@ -74,63 +76,165 @@ def get_username_safe(user_id):
 
 def calculate_branch_cash_position(branch_id, branch_name, academic_year=None):
     """
-    Calculates exact cash collection, remitted amount, and available cash in hand for a branch.
+    Calculates exact cash collection, remitted amount, and available cash in hand for a branch,
+    harmonized with the Accounting Reconciliation Dashboard methodology across financial/academic years.
     """
-    # 1. Total Cash collected in Fee Payments for this branch
-    fee_query = FeePayment.query.filter(
-        FeePayment.status == 'A',
-        FeePayment.payment_mode.in_(['Cash', 'CASH', 'cash'])
-    )
-    if branch_name:
-        fee_query = fee_query.filter(FeePayment.branch == branch_name)
-    if academic_year and academic_year not in ('All', 'AllYears', ''):
-        fee_query = fee_query.filter(FeePayment.academic_year == academic_year)
-        
-    all_cash_payments = fee_query.all()
-    total_cash_collected = sum(Decimal(str(p.amount_paid or 0)) for p in all_cash_payments)
-    
-    # 2. Total Cash Remitted (both Approved and Pending remittances subtract from available hand cash)
-    rem_query = RemittanceMaster.query.filter(
-        RemittanceMaster.is_active == True,
-        RemittanceMaster.status.in_(['Approved', 'Pending'])
-    )
-    if branch_id:
-        rem_query = rem_query.filter(RemittanceMaster.branch_id == branch_id)
-        
-    active_remittances = rem_query.all()
-    total_remitted = sum(Decimal(str(r.deposit_amount or 0)) for r in active_remittances)
-    
-    cash_in_hand = total_cash_collected - total_remitted
-    if cash_in_hand < Decimal(0):
-        cash_in_hand = Decimal(0)
-        
-    today_str = get_today().strftime('%Y-%m-%d')
-    today_collection = Decimal(0)
-    historical_collection = Decimal(0)
-    for p in all_cash_payments:
-        amt = Decimal(str(p.amount_paid or 0))
-        p_date = getattr(p, 'payment_date', '') or ''
-        p_date_str = p_date.strftime('%Y-%m-%d') if hasattr(p_date, 'strftime') else str(p_date)
-        if p_date_str < today_str and p_date_str != '':
-            historical_collection += amt
-        else:
-            today_collection += amt
+    from sqlalchemy import or_, and_
 
-    today_remitted = Decimal(0)
-    historical_remitted = Decimal(0)
-    for r in active_remittances:
-        r_amt = Decimal(str(r.deposit_amount or 0))
-        r_date = getattr(r, 'business_date', '') or ''
-        r_date_str = r_date.strftime('%Y-%m-%d') if hasattr(r_date, 'strftime') else str(r_date)
-        if r_date_str < today_str and r_date_str != '':
-            historical_remitted += r_amt
-        else:
-            today_remitted += r_amt
+    # Determine Academic Year Date Boundaries (Indian Financial Year: 01-Apr to 31-Mar)
+    fy_start_year = None
+    if academic_year and academic_year not in ('All', 'AllBranches', 'AllYears', ''):
+        try:
+            fy_start_year = int(str(academic_year).split("-")[0])
+        except (ValueError, IndexError, AttributeError):
+            fy_start_year = None
 
-    opening_balance = historical_collection - historical_remitted
-    if opening_balance < Decimal(0):
-        opening_balance = Decimal(0)
-        
+    today_date = get_today()
+    today_str = today_date.strftime('%Y-%m-%d')
+
+    if fy_start_year:
+        start_date = date(fy_start_year, 4, 1)
+        end_date = date(fy_start_year + 1, 3, 31)
+
+        # 1. Opening Balance Brought Forward From Prior Financial Years (< start_date)
+        # Matches Reconciliation Dashboard Opening Balance (Opening Debit - Opening Credit)
+        prev_fee_q = FeePayment.query.filter(
+            FeePayment.status == 'A',
+            FeePayment.payment_mode.in_(['Cash', 'CASH', 'cash'])
+        )
+        if branch_name:
+            prev_fee_q = prev_fee_q.filter(FeePayment.branch == branch_name)
+        prev_fee_q = prev_fee_q.filter(
+            or_(
+                FeePayment.payment_date < start_date,
+                and_(FeePayment.payment_date == None, FeePayment.academic_year < academic_year)
+            )
+        )
+        prior_fee_payments = prev_fee_q.all()
+        opening_debit = sum(Decimal(str(p.amount_paid or 0)) for p in prior_fee_payments)
+
+        prev_rem_q = RemittanceMaster.query.filter(
+            RemittanceMaster.is_active == True,
+            RemittanceMaster.status.in_(['Approved', 'Pending']),
+            RemittanceMaster.business_date < start_date
+        )
+        if branch_id:
+            prev_rem_q = prev_rem_q.filter(RemittanceMaster.branch_id == branch_id)
+        prior_remittances = prev_rem_q.all()
+        opening_credit = sum(Decimal(str(r.deposit_amount or 0)) for r in prior_remittances)
+
+        fy_opening_balance = opening_debit - opening_credit
+        if fy_opening_balance < Decimal(0):
+            fy_opening_balance = Decimal(0)
+
+        # 2. Current Academic Year Collections (start_date <= payment_date <= end_date)
+        curr_fee_q = FeePayment.query.filter(
+            FeePayment.status == 'A',
+            FeePayment.payment_mode.in_(['Cash', 'CASH', 'cash'])
+        )
+        if branch_name:
+            curr_fee_q = curr_fee_q.filter(FeePayment.branch == branch_name)
+        curr_fee_q = curr_fee_q.filter(
+            or_(
+                and_(FeePayment.payment_date >= start_date, FeePayment.payment_date <= end_date),
+                and_(FeePayment.payment_date == None, FeePayment.academic_year == academic_year)
+            )
+        )
+        curr_fee_payments = curr_fee_q.all()
+        ay_cash_collected = sum(Decimal(str(p.amount_paid or 0)) for p in curr_fee_payments)
+
+        # 3. Current Academic Year Remittances (start_date <= business_date <= end_date)
+        curr_rem_q = RemittanceMaster.query.filter(
+            RemittanceMaster.is_active == True,
+            RemittanceMaster.status.in_(['Approved', 'Pending']),
+            RemittanceMaster.business_date >= start_date,
+            RemittanceMaster.business_date <= end_date
+        )
+        if branch_id:
+            curr_rem_q = curr_rem_q.filter(RemittanceMaster.branch_id == branch_id)
+        curr_remittances = curr_rem_q.all()
+        ay_remitted = sum(Decimal(str(r.deposit_amount or 0)) for r in curr_remittances)
+
+        # Total cumulative figures for this branch / AY
+        total_cash_collected = fy_opening_balance + ay_cash_collected
+        total_remitted = ay_remitted
+        cash_in_hand = total_cash_collected - total_remitted
+        if cash_in_hand < Decimal(0):
+            cash_in_hand = Decimal(0)
+
+        # Daily closing calculations (Today Collections vs Yesterday's Closing)
+        today_collection = Decimal(0)
+        for p in curr_fee_payments:
+            p_date = getattr(p, 'payment_date', None)
+            if p_date:
+                p_str = p_date.strftime('%Y-%m-%d') if hasattr(p_date, 'strftime') else str(p_date)
+                if p_str == today_str:
+                    today_collection += Decimal(str(p.amount_paid or 0))
+
+        today_remitted = Decimal(0)
+        for r in curr_remittances:
+            r_date = getattr(r, 'business_date', None)
+            if r_date:
+                r_str = r_date.strftime('%Y-%m-%d') if hasattr(r_date, 'strftime') else str(r_date)
+                if r_str == today_str:
+                    today_remitted += Decimal(str(r.deposit_amount or 0))
+
+        opening_balance = cash_in_hand - today_collection + today_remitted
+        if opening_balance < Decimal(0):
+            opening_balance = Decimal(0)
+
+        all_active_payments = prior_fee_payments + curr_fee_payments
+
+    else:
+        # Fallback / Global mode without academic year filter
+        fee_query = FeePayment.query.filter(
+            FeePayment.status == 'A',
+            FeePayment.payment_mode.in_(['Cash', 'CASH', 'cash'])
+        )
+        if branch_name:
+            fee_query = fee_query.filter(FeePayment.branch == branch_name)
+        all_active_payments = fee_query.all()
+        total_cash_collected = sum(Decimal(str(p.amount_paid or 0)) for p in all_active_payments)
+
+        rem_query = RemittanceMaster.query.filter(
+            RemittanceMaster.is_active == True,
+            RemittanceMaster.status.in_(['Approved', 'Pending'])
+        )
+        if branch_id:
+            rem_query = rem_query.filter(RemittanceMaster.branch_id == branch_id)
+        all_remittances = rem_query.all()
+        total_remitted = sum(Decimal(str(r.deposit_amount or 0)) for r in all_remittances)
+
+        cash_in_hand = total_cash_collected - total_remitted
+        if cash_in_hand < Decimal(0):
+            cash_in_hand = Decimal(0)
+
+        today_collection = Decimal(0)
+        historical_collection = Decimal(0)
+        for p in all_active_payments:
+            amt = Decimal(str(p.amount_paid or 0))
+            p_date = getattr(p, 'payment_date', '') or ''
+            p_date_str = p_date.strftime('%Y-%m-%d') if hasattr(p_date, 'strftime') else str(p_date)
+            if p_date_str < today_str and p_date_str != '':
+                historical_collection += amt
+            else:
+                today_collection += amt
+
+        today_remitted = Decimal(0)
+        historical_remitted = Decimal(0)
+        for r in all_remittances:
+            r_amt = Decimal(str(r.deposit_amount or 0))
+            r_date = getattr(r, 'business_date', '') or ''
+            r_date_str = r_date.strftime('%Y-%m-%d') if hasattr(r_date, 'strftime') else str(r_date)
+            if r_date_str < today_str and r_date_str != '':
+                historical_remitted += r_amt
+            else:
+                today_remitted += r_amt
+
+        opening_balance = historical_collection - historical_remitted
+        if opening_balance < Decimal(0):
+            opening_balance = Decimal(0)
+
     # 3. Find unremitted cash receipts (supporting partial remittances)
     remitted_rows = db.session.query(RemittanceReceipt.fee_receipt_id, RemittanceReceipt.receipt_amount).join(
         RemittanceMaster, RemittanceReceipt.remittance_id == RemittanceMaster.id
@@ -138,14 +242,14 @@ def calculate_branch_cash_position(branch_id, branch_name, academic_year=None):
         RemittanceMaster.is_active == True,
         RemittanceMaster.status.in_(['Approved', 'Pending'])
     ).all()
-    
+
     remitted_totals = {}
     for r_id, r_amt in remitted_rows:
         remitted_totals[r_id] = remitted_totals.get(r_id, Decimal(0)) + Decimal(str(r_amt or 0))
-    
+
     receipts_data = []
     # Sort chronologically by payment date and id for FIFO allocation
-    sorted_payments = sorted(all_cash_payments, key=lambda x: (str(getattr(x, 'payment_date', '') or ''), x.id))
+    sorted_payments = sorted(all_active_payments, key=lambda x: (str(getattr(x, 'payment_date', '') or ''), x.id))
     for p in sorted_payments:
         orig_amount = Decimal(str(p.amount_paid or 0))
         remitted_amt = remitted_totals.get(p.id, Decimal(0))
@@ -163,10 +267,11 @@ def calculate_branch_cash_position(branch_id, branch_name, academic_year=None):
                 "payment_date": p.payment_date.strftime("%Y-%m-%d") if getattr(p, "payment_date", None) and hasattr(p.payment_date, "strftime") else str(getattr(p, "payment_date", "") or ""),
                 "amount": float(unremitted_amt)
             })
-        
+
     return {
         "cash_in_hand": float(cash_in_hand),
         "opening_balance": float(opening_balance),
+        "fy_opening_balance": float(fy_opening_balance) if fy_start_year else 0.0,
         "today_collection": float(today_collection),
         "today_remitted": float(today_remitted),
         "total_cash_collected": float(total_cash_collected),
@@ -323,6 +428,7 @@ def create_remittance(current_user):
             remittance_no=remittance_no,
             branch_id=branch_id,
             business_date=business_date,
+            academic_year=h_year,
             deposit_type=deposit_type,
             bank_name=bank_name,
             account_number=account_number,
