@@ -1216,7 +1216,7 @@ def update_receipt_details(current_user, receipt_no):
                     FeePayment.branch == target_branch,
                     FeePayment.branch == clean_b,
                     FeePayment.branch == f"MS HifzAcademy {clean_b}",
-                    FeePayment.branch.ilike(f"%{clean_b}%")
+                    FeePayment.branch.ilike(f"% {clean_b}%")
                 )
             )
 

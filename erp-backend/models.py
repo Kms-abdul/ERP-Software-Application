@@ -992,6 +992,7 @@ class RemittanceMaster(db.Model, AuditMixin):
     remittance_no = db.Column(db.String(50), unique=True, nullable=False, index=True)
     branch_id = db.Column(db.Integer, db.ForeignKey("branches.id"), nullable=False, index=True)
     business_date = db.Column(db.Date, nullable=False, index=True)
+    academic_year = db.Column(db.String(20), nullable=True, index=True) # Tagged academic year (e.g. 2026-2027)
     
     deposit_type = db.Column(db.String(50), default="Corporate Office", server_default="Corporate Office", nullable=False)
     bank_name = db.Column(db.String(100), nullable=True)
