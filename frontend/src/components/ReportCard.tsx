@@ -7,7 +7,7 @@ import { ProgressReportData } from '../reportcardtypes';
 interface ReportCardProps {
   data: ProgressReportData;
 }
-import logo1 from '../images/logo1.png';
+import MSEducationAcademylogo from '../images/MSEducationAcademylogo.png';
 import HifzAcademylogo from '../images/HifzAcademylogo.png';
 import { formatReportBranch } from '../utils/branchHelper';
 
@@ -219,15 +219,15 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
           <img
             src={HifzAcademylogo}
             alt="MS HIFZ Academy Logo"
-            style={{ maxWidth: '280px', maxHeight: '65px', width: 'auto', height: 'auto', objectFit: 'contain' }}
+            style={{ maxWidth: '180px', maxHeight: '55px', width: 'auto', height: 'auto', objectFit: 'contain' }}
           />
         </div>
         <div className="logo-container" style={{ width: 'auto', height: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginRight: '10px' }}>
           <img
-            src={logo1}
+            src={MSEducationAcademylogo}
             alt="MS Education Academy Logo"
             referrerPolicy="no-referrer"
-            style={{ maxWidth: '90px', maxHeight: '55px', width: 'auto', height: 'auto', objectFit: 'contain' }}
+            style={{ maxWidth: '180px', maxHeight: '55px', width: 'auto', height: 'auto', objectFit: 'contain' }}
             onError={(e) => {
               e.currentTarget.style.display = 'none';
               console.log('Logo 1 failed to load');
