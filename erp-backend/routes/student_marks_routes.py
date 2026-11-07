@@ -20,6 +20,7 @@ def get_marks_entry_grid():
         section = request.args.get('section') # Optional filter
         test_id = request.args.get('test_id') # This is the generic test ID (e.g. "Unit 1" ID)
         subject_id = request.args.get('subject_id')
+        category = request.args.get('category') # Optional Category filter
 
         if not all([academic_year, branch, class_id, test_id, subject_id]):
             return jsonify({"error": "Missing required parameters"}), 400
@@ -62,7 +63,8 @@ def get_marks_entry_grid():
             Student.admission_no,
             Student.first_name,
             Student.last_name,
-            StudentAcademicRecord.roll_number
+            StudentAcademicRecord.roll_number,
+            Student.AdmissionCategory
         ).join(
             StudentAcademicRecord, Student.student_id == StudentAcademicRecord.student_id
         ).join(
@@ -83,6 +85,13 @@ def get_marks_entry_grid():
 
         if section:
             query = query.filter(StudentAcademicRecord.section == section)
+
+        if category and category not in ("All", "All Categories", "Select Category", ""):
+            cat_str = "Hifz+Nazira" if category == "Hifz + Nazira" else category
+            query = query.filter(or_(
+                Student.AdmissionCategory == cat_str,
+                Student.AdmissionCategory == category
+            ))
 
         students = query.all()
 
@@ -149,11 +158,16 @@ def get_marks_entry_grid():
                 except:
                     pass
 
+            cat_display = s.AdmissionCategory or ""
+            if cat_display == "Hifz+Nazira":
+                cat_display = "Hifz + Nazira"
+
             student_list.append({
                 "student_id": s.student_id,
                 "admission_no": s.admission_no,
                 "name": f"{s.first_name or ''} {s.last_name or ''}".strip(),
                 "roll_number": roll,
+                "category": cat_display,
                 "marks_obtained": mark_data['marks'],
                 "is_absent": mark_data['is_absent'],
                 "grade": grade_str
