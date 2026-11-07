@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api, { remittanceApi } from '../api';
+import HifzAcademylogo from '../images/HifzAcademylogo.png'
 
 interface DenominationRow {
   denomination: number;
@@ -558,10 +559,10 @@ const RemittanceDeposit: React.FC = () => {
                     </div>
                   )}
 
-                  <div>
+                  {/*<div>
                     <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
                       {depositType === 'Bank' ? 'Upload Bank Deposit Slip / Challan Photo (Recommended)' : 'Upload Deposit Voucher / Proof (Optional)'}
-                    </label>
+                      </label>
                     <div className="border-2 border-dashed border-slate-300 rounded-lg p-3 text-center bg-slate-50 hover:bg-slate-100 transition">
                       <input
                         type="file"
@@ -580,7 +581,7 @@ const RemittanceDeposit: React.FC = () => {
                         )}
                       </label>
                     </div>
-                  </div>
+                  </div>*/}
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Remarks / Notes</label>
@@ -812,7 +813,7 @@ const RemittanceDeposit: React.FC = () => {
 
             <div className="p-8 overflow-y-auto space-y-6 text-slate-800" id="printable-remittance-receipt">
               <div className="text-center border-b-2 border-slate-800 pb-4">
-                <h1 className="text-2xl font-black uppercase tracking-wider text-slate-900">MS HIFZ EDU ERP</h1>
+                <img src={HifzAcademylogo} className="h-10 mx-auto" alt="Company Logo" />
                 <p className="text-sm font-bold text-slate-600 mt-0.5">CASH REMITTANCE DEPOSIT VOUCHER</p>
                 <span className="inline-block mt-2 px-3 py-1 bg-slate-100 border border-slate-300 font-black text-xs uppercase tracking-widest rounded text-slate-800">
                   {printModalData.deposit_type === 'Bank' ? '🏦 Bank Deposit Copy' : '🏢 Corporate Office Copy'}

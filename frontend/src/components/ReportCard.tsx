@@ -7,7 +7,7 @@ import { ProgressReportData } from '../reportcardtypes';
 interface ReportCardProps {
   data: ProgressReportData;
 }
-import logo1 from '../images/logo1.png';
+import MSEducationAcademylogo from '../images/MSEducationAcademylogo.png';
 import HifzAcademylogo from '../images/HifzAcademylogo.png';
 import { formatReportBranch } from '../utils/branchHelper';
 
@@ -189,6 +189,12 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
             [dir="rtl"] {
               font-family: 'Noto Nastaliq Urdu', 'Noto Naskh Arabic', 'Noto Sans Arabic', 'Arial Unicode MS', 'Simplified Arabic', 'Traditional Arabic', 'Arial', sans-serif !important;
             }
+            /* Ensure background colors print in all browsers */
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              color-adjust: exact !important;
+            }
             .hifz-target-chart {
               overflow: hidden !important;
             }
@@ -219,15 +225,15 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
           <img
             src={HifzAcademylogo}
             alt="MS HIFZ Academy Logo"
-            style={{ maxWidth: '280px', maxHeight: '65px', width: 'auto', height: 'auto', objectFit: 'contain' }}
+            style={{ maxWidth: '180px', maxHeight: '55px', width: 'auto', height: 'auto', objectFit: 'contain' }}
           />
         </div>
         <div className="logo-container" style={{ width: 'auto', height: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginRight: '10px' }}>
           <img
-            src={logo1}
+            src={MSEducationAcademylogo}
             alt="MS Education Academy Logo"
             referrerPolicy="no-referrer"
-            style={{ maxWidth: '90px', maxHeight: '55px', width: 'auto', height: 'auto', objectFit: 'contain' }}
+            style={{ maxWidth: '180px', maxHeight: '55px', width: 'auto', height: 'auto', objectFit: 'contain' }}
             onError={(e) => {
               e.currentTarget.style.display = 'none';
               console.log('Logo 1 failed to load');
@@ -604,7 +610,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
       </div>
 
       {/* Teacher's Remark */}
-      <div className="border border-gray-300 rounded p-2 mb-8 bg-gray-50 relative">
+      <div className="border border-gray-300 rounded p-2 mb-2 bg-gray-50 relative">
         <div className="absolute top-2 right-4 text-right">
           <span dir="rtl" className="font-arabic text-green-700">معلم تاثرات:</span>
           <span className="font-bold text-sm block">: Teacher's Remark</span>
@@ -615,7 +621,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
       </div>
 
       {/* Footer Signatures */}
-      <div className="flex justify-between items-end mt-10 pt-0 border-t border-gray-200">
+      <div className="flex justify-between items-end pt-2 border-t border-gray-200">
         <div className="text-center">
           <div className="border-t-2 border-dotted border-gray-400 w-48 mb-2 mx-auto"></div>
           <span className="font-bold text-sm text-indigo-900">Signature of Parent</span>

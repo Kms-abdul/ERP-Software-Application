@@ -22,80 +22,161 @@ const StudentReportCard: React.FC = () => {
     const style = document.createElement('style');
     style.id = 'student-report-print-styles';
     style.textContent = `
+      /* Hide summary page on screen — it's print-only */
+      @media screen {
+        .print-summary-page {
+          display: none !important;
+        }
+      }
+
       @media print {
         @page {
-          margin: 5mm; /* Sets a standard, small print margin */
+          margin: 8mm;
+          size: A4;
         }
 
-        /* 1. RESET OUTER APP SHELL */
-        html, body, #root, #app, .h-screen, .min-h-screen, .student-reports-wrapper {
+        /* ── 1. Kill the Dashboard layout scrollbar (the culprit) ── */
+        .flex.h-screen.overflow-hidden,
+        .flex.flex-col.flex-1.overflow-y-auto,
+        .flex.flex-col.flex-1.overflow-x-hidden {
+          overflow: visible !important;
+          height: auto !important;
+        }
+
+        /* ── 2. Reset html/body ── */
+        html, body {
           margin: 0 !important;
           padding: 0 !important;
           height: auto !important;
-          min-height: 0 !important;
+          width: 100% !important;
           overflow: visible !important;
           background: white !important;
         }
 
-        /* FIX THE LEFT SPACE: Strip margin-left from any wrapper that makes room for the sidebar */
-        body > div, #root > div, main, .main-content {
-          margin-left: 0 !important;
-          padding-left: 0 !important;
-          width: 100% !important;
-          max-width: 100% !important;
+        /* ── 3. Kill ALL scrollbars from every element ── */
+        * {
+          scrollbar-width: none !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        *::-webkit-scrollbar {
+          display: none !important;
+          width: 0 !important;
+          height: 0 !important;
         }
 
-        /* 2. HIDE UI CHROME (Tabs, Sidebar, Menu) */
-        .no-print, 
-        aside, nav, header, footer,
-        button, a[href*="back"], 
-        .sidebar, .menu,
+        /* ── 4. Hide UI chrome ── */
+        .no-print,
+        aside,
+        nav,
+        header,
+        footer,
+        button,
+        a[href*="back"],
+        .sidebar,
+        .menu,
         [role="tablist"],
         [class*="sidebar"],
         [class*="nav"] {
           display: none !important;
         }
 
-        /* 3. FIX REPORT CARD CONTAINER (Fixes missing signatures) */
-        .all-reports-container {
-          display: block !important; 
+        /* ── 5. Main content area ── */
+        main.flex-1,
+        main,
+        .main-content {
+          overflow: visible !important;
+          height: auto !important;
+          padding: 0 !important;
+          margin-left: 0 !important;
+          padding-left: 0 !important;
+          width: 100% !important;
+          max-width: 100% !important;
+        }
+
+        /* ── 6. Student reports wrapper ── */
+        .student-reports-wrapper {
+          padding: 0 !important;
+          margin: 0 !important;
+          overflow: visible !important;
+          height: auto !important;
           width: 100% !important;
         }
 
+        /* ── 7. Report card container ── */
         .report-card-container {
-          display: block !important; /* CRITICAL: Flexbox cuts off footers in Chrome print */
           width: 100% !important;
-          max-width: 100% !important; /* Overrides max-w-5xl for printing */
-          margin: 0 0 20px 0 !important; /* Centers and adds bottom spacing */
+          max-width: 100% !important;
+          margin: 0 !important;
           padding: 0 !important;
           box-shadow: none !important;
-          border: none !important;
-          page-break-inside: avoid; /* Prevents the report from splitting awkwardly */
-          page-break-after: always; /* Forces each report to a new page */
-        }
-        
-        /* Stop the very last report from creating an empty blank page at the end */
-        .report-card-container:last-child {
-          page-break-after: auto;
+          border: 1px solid #1e3a5f !important;
+          display: block !important;
+          overflow: visible !important;
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
         }
 
-        /* 4. PRESERVE INTERNAL LAYOUT */
+        /* ── 8. Page breaks ── */
+        .report-card-container {
+          page-break-after: always !important;
+          break-after: page !important;
+        }
+        /* When only single report and no summary page */
+        .all-reports-container > .report-card-container:last-child {
+          page-break-after: avoid !important;
+          break-after: avoid !important;
+        }
+
+        /* ── 9. Prevent content cutting inside rows ── */
+        .report-card-container table {
+          page-break-inside: auto !important;
+        }
+        .report-card-container tr {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+        }
+
+        /* ── 10. Hide recharts tooltip ── */
         .recharts-tooltip-wrapper {
           display: none !important;
           visibility: hidden !important;
         }
 
-        /* 5. FIX CHARTS AND IMAGES */
+        /* ── 11. SVG / images ── */
         svg, img {
           max-width: 100% !important;
-          display: block; 
           overflow: visible !important;
+          display: block !important;
         }
 
         .recharts-responsive-container,
         .recharts-wrapper {
           max-width: 100% !important;
           width: 100% !important;
+        }
+
+        /* ── 12. All reports container ── */
+        .all-reports-container {
+          overflow: visible !important;
+          width: 100% !important;
+          height: auto !important;
+          display: block !important;
+        }
+
+        /* ── 13. Summary Page (Last Page) ── */
+        .print-summary-page {
+          display: flex !important;
+          page-break-before: always !important;
+          break-before: page !important;
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+          page-break-after: avoid !important;
+          break-after: avoid !important;
+          overflow: visible !important;
+          width: 100% !important;
+          min-height: 90vh !important;
+          box-sizing: border-box !important;
         }
       }
     `;
@@ -815,6 +896,143 @@ const StudentReportCard: React.FC = () => {
           {allStudentsData.length > 0 && allStudentsData.map((studentData, index) => (
             <ReportCard key={index} data={studentData} />
           ))}
+
+          {/* ── PRINT SUMMARY PAGE (last page, only for bulk print) ──────────────
+              Appears as the final page when printing all students.
+              Lists the batch details: branch, class, section, test, students.
+              This ensures that even if the last report card is slightly clipped,
+              the administrator always has a clean reference of what was printed. */}
+          {allStudentsData.length > 0 && (() => {
+            const first = allStudentsData[0];
+            const className = classes.find(c => String(c.id) === selectedClass)?.class_name ?? selectedClass;
+            const testName = tests.find(t => String(t.test_id) === selectedTestId)?.test_name ?? selectedTestId;
+            const printedAt = new Date().toLocaleString('en-IN', {
+              day: '2-digit', month: 'long', year: 'numeric',
+              hour: '2-digit', minute: '2-digit',
+            });
+            return (
+              <div
+                className="print-summary-page"
+                style={{
+                  pageBreakBefore: 'always',
+                  breakBefore: 'page',
+                  width: '100%',
+                  minHeight: '100vh',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontFamily: "'Segoe UI', system-ui, sans-serif",
+                  padding: '40px 60px',
+                  boxSizing: 'border-box',
+                  backgroundColor: '#fff',
+                }}
+              >
+                {/* Title block */}
+                <div style={{
+                  width: '100%', textAlign: 'center',
+                  borderBottom: '3px solid #1e3a5f',
+                  paddingBottom: '18px', marginBottom: '24px',
+                }}>
+                  <div style={{
+                    fontSize: '11px', fontWeight: 700, letterSpacing: '2px',
+                    textTransform: 'uppercase', color: '#6b7280', marginBottom: '6px',
+                  }}>
+                    MS Hifz Academy — Print Summary
+                  </div>
+                  <div style={{
+                    fontSize: '26px', fontWeight: 800, color: '#1e3a5f',
+                    letterSpacing: '0.5px', marginBottom: '4px',
+                  }}>
+                    Progress Report — Batch Print Record
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                    Printed on: {printedAt}
+                  </div>
+                </div>
+
+                {/* Batch meta */}
+                <div style={{
+                  width: '100%', display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px',
+                  marginBottom: '28px',
+                }}>
+                  {[
+                    ['Branch', first?.student?.branchName ?? selectedBranch],
+                    ['Class', className],
+                    ['Section', selectedSection || '—'],
+                    ['Academic Year', first?.student?.academicYear ?? academicYear],
+                    ['Test / Exam', testName],
+                    ['Total Students Printed', String(allStudentsData.length)],
+                  ].map(([label, value]) => (
+                    <div key={label} style={{
+                      border: '1px solid #e2e8f0', borderRadius: '8px',
+                      padding: '12px 16px', backgroundColor: '#f8fafc',
+                    }}>
+                      <div style={{
+                        fontSize: '10px', fontWeight: 700, letterSpacing: '0.8px',
+                        textTransform: 'uppercase', color: '#94a3b8', marginBottom: '4px',
+                      }}>
+                        {label}
+                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                        {value || '—'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Student list table */}
+                <div style={{ width: '100%' }}>
+                  <div style={{
+                    fontSize: '11px', fontWeight: 700, letterSpacing: '1px',
+                    textTransform: 'uppercase', color: '#1e3a5f',
+                    borderBottom: '2px solid #1e3a5f', paddingBottom: '6px',
+                    marginBottom: '10px',
+                  }}>
+                    Students Included in This Print Run
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#1e3a5f', color: '#fff' }}>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, borderRight: '1px solid #2d4f7f' }}>#</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, borderRight: '1px solid #2d4f7f' }}>Student Name</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, borderRight: '1px solid #2d4f7f' }}>Father's Name</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, borderRight: '1px solid #2d4f7f' }}>Roll No</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>Class / Section</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allStudentsData.map((sd, idx) => (
+                        <tr key={idx} style={{
+                          backgroundColor: idx % 2 === 0 ? '#f8fafc' : '#ffffff',
+                          borderBottom: '1px solid #e2e8f0',
+                        }}>
+                          <td style={{ padding: '7px 12px', color: '#64748b', fontWeight: 600 }}>{idx + 1}</td>
+                          <td style={{ padding: '7px 12px', fontWeight: 600, color: '#1e293b' }}>{sd.student?.studentName ?? '—'}</td>
+                          <td style={{ padding: '7px 12px', color: '#475569' }}>{sd.student?.fathersName ?? '—'}</td>
+                          <td style={{ padding: '7px 12px', color: '#475569' }}>{sd.student?.groupRollNo ?? '—'}</td>
+                          <td style={{ padding: '7px 12px', color: '#475569' }}>{sd.student?.classSection ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Footer note */}
+                <div style={{
+                  marginTop: 'auto', paddingTop: '30px', width: '100%',
+                  borderTop: '1px dashed #cbd5e1', textAlign: 'center',
+                  fontSize: '10px', color: '#94a3b8',
+                }}>
+                  This page is auto-generated by the MS Hifz Academy Report System.
+                  It confirms that the above {allStudentsData.length} progress report(s)
+                  were printed from the system. Keep for records.
+                </div>
+              </div>
+            );
+          })()}
+
         </div>
       )}
     </div>
