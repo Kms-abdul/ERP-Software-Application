@@ -205,8 +205,20 @@ const InstallmentRow: React.FC<{
         </tr>
     );
 };
+const getLocalDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+};
 
 const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
+    const [allowBackdatedPayment, setAllowBackdatedPayment] =
+        useState(false);
+    const [isParameterLoading, setIsParameterLoading] =
+        useState(true);
     const [students, setStudents] = useState<FeeStudent[]>([]);
     const [classes, setClasses] = useState<string[]>([]);
     const [sectionOptions, setSectionOptions] = useState<string[]>([]);
@@ -418,6 +430,32 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
     const [paymentNote, setPaymentNote] = useState('');
     const [paymentMode, setPaymentMode] = useState('Cash');
     const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+    useEffect(() => {
+        const fetchPaymentSettings = async () => {
+            try {
+                const response = await api.get('/fees/payment-settings');
+
+                const allowed =
+                    response.data?.allow_backdated_payment === true;
+
+                setAllowBackdatedPayment(allowed);
+
+                if (!allowed) {
+                    setPaymentDate(getLocalDate());
+                }
+            } catch (error) {
+                console.error('Failed to fetch fee payment settings:', error);
+
+                // Fail closed if settings cannot be fetched.
+                setAllowBackdatedPayment(false);
+                setPaymentDate(getLocalDate());
+            } finally {
+                setIsParameterLoading(false);
+            }
+        };
+
+        fetchPaymentSettings();
+    }, []);
     const [transactionId, setTransactionId] = useState('');
     const [transactionIdDescription, setTransactionIdDescription] = useState('');
     const [chequeNo, setChequeNo] = useState('');
@@ -1062,7 +1100,7 @@ const TakeFee: React.FC<{ navigateTo?: (page: Page) => void }> = () => {
                                             value={paymentDate}
                                             max={new Date().toISOString().split('T')[0]}
                                             //readOnly
-                                            disabled={false}
+                                            disabled={isParameterLoading || !allowBackdatedPayment}
                                             onChange={e => {
                                                 const today = new Date().toISOString().split('T')[0];
                                                 if (e.target.value > today) {

@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from extensions import db, get_now, get_today, to_local_time
-from models import Student, StudentFee, FeePayment, Branch, FeeInstallment, Concession, ClassFeeStructure, StudentAcademicRecord, FeeType
+from models import Student, StudentFee, FeePayment, Branch, FeeInstallment, Concession, ClassFeeStructure, StudentAcademicRecord, FeeType, ParameterTable
 from helpers import token_required, require_academic_year, normalize_fee_title, assign_fee_to_student, require_editable_student, ensure_student_editable, has_global_branch_access, user_can_access_branch
 from services.sequence_service import SequenceService
 from datetime import datetime, date
@@ -10,6 +10,32 @@ import traceback
 
 bp = Blueprint('fee_transaction_routes', __name__)
 
+def is_backdated_fee_payment_allowed():
+    """
+    Returns True if backdated fee payments are allowed.
+    Parameter value:
+      1 = Allowed
+      0 = Not allowed
+    Defaults to False (strict mode).
+    """
+    try:
+        param = ParameterTable.query.filter_by(
+            parameter_name='ALLOW_BACKDATED_FEE_PAYMENT',
+            is_active=True
+        ).first()
+
+        if param and param.parameter_value:
+            return str(param.parameter_value).strip() == '1'
+
+        return False
+    except Exception:
+        return False    
+@bp.route("/api/fees/payment-settings", methods=["GET"])
+@token_required
+def get_fee_payment_settings(current_user):
+    return jsonify({
+        "allow_backdated_payment": is_backdated_fee_payment_allowed()
+    }), 200
 @bp.route("/api/fees/students", methods=["GET"])
 @token_required
 def get_fee_students(current_user):
