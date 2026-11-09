@@ -10,6 +10,7 @@ interface StudentMarkEntry {
     admission_no: string;
     roll_number: string | number;
     name: string;
+    category?: string;
     marks_obtained: string | number; // Input value
     is_absent: boolean;
     grade?: string; // Display only
@@ -26,6 +27,7 @@ const MarksEntry: React.FC<MarksEntryProps> = () => {
     const [selectedClass, setSelectedClass] = useState<string>("");
     const [sections, setSections] = useState<string[]>([]);
     const [selectedSection, setSelectedSection] = useState<string>("");
+    const [selectedCategory, setSelectedCategory] = useState<string>("");
 
     const [tests, setTests] = useState<any[]>([]);
     const [selectedTestId, setSelectedTestId] = useState<string>("");
@@ -163,11 +165,17 @@ const MarksEntry: React.FC<MarksEntryProps> = () => {
                 class_id: selectedClass,
                 section: selectedSection,
                 test_id: selectedTestId,
-                subject_id: selectedSubjectId
+                subject_id: selectedSubjectId,
+                category: selectedCategory
             }
         })
             .then(res => {
-                setStudents(res.data.students);
+                let fetchedStudents = res.data.students || [];
+                if (selectedCategory) {
+                    const target = selectedCategory === "Hifz + Nazira" ? ["Hifz + Nazira", "Hifz+Nazira"] : [selectedCategory];
+                    fetchedStudents = fetchedStudents.filter((s: any) => !s.category || target.includes(s.category));
+                }
+                setStudents(fetchedStudents);
                 setSubjectTotalMarks(res.data.subject_total_marks);
                 setGradingScale(res.data.grading_scale);
                 setActiveClassTestId(res.data.class_test_id); // Store for save
@@ -297,12 +305,13 @@ const MarksEntry: React.FC<MarksEntryProps> = () => {
         // Get the selected test name
         const testName = tests.find(t => t.test_id == selectedTestId)?.test_name || 'Test';
 
-        const header = ["S.No", "Roll No", "Admission No", "Student Name", "Marks", "Grade", "Status"];
+        const header = ["S.No", "Roll No", "Admission No", "Student Name", "Category", "Marks", "Grade", "Status"];
         const data = students.map((student, index) => [
             index + 1,
             student.roll_number,
             student.admission_no,
             student.name,
+            student.category || '-',
             student.is_absent ? 'AB' : student.marks_obtained,
             student.grade || '-',
             student.is_absent ? 'Absent' : (student.marks_obtained !== '' && student.marks_obtained !== null && student.marks_obtained !== undefined) ? 'Present' : '-'
@@ -328,7 +337,7 @@ const MarksEntry: React.FC<MarksEntryProps> = () => {
             <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Enter Subject Marks</h2>
 
             {/* Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6 bg-white p-4 rounded shadow-sm">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6 bg-white p-4 rounded shadow-sm">
                 {/* Branch */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700">Branch</label>
@@ -365,6 +374,20 @@ const MarksEntry: React.FC<MarksEntryProps> = () => {
                     >
                         <option value="">Select Section</option>
                         {sections.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                </div>
+
+                {/* Category */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Category</label>
+                    <select
+                        value={selectedCategory}
+                        onChange={e => setSelectedCategory(e.target.value)}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border p-2"
+                    >
+                        <option value="">Select Category</option>
+                        <option value="Hifz">Hifz</option>
+                        <option value="Hifz + Nazira">Hifz + Nazira</option>
                     </select>
                 </div>
 
@@ -433,6 +456,7 @@ const MarksEntry: React.FC<MarksEntryProps> = () => {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Roll No</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Admission No</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marks</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grade</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -445,6 +469,15 @@ const MarksEntry: React.FC<MarksEntryProps> = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{student.roll_number}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.admission_no}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{student.name}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                        {student.category ? (
+                                            <span className="bg-indigo-50 text-indigo-700 text-xs px-2.5 py-1 rounded-full font-semibold border border-indigo-200">
+                                                {student.category}
+                                            </span>
+                                        ) : (
+                                            <span className="text-gray-400 text-xs">-</span>
+                                        )}
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <input
                                             type="text"

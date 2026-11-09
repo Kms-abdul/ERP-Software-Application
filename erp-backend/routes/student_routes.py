@@ -236,6 +236,14 @@ def get_students(current_user):
             else:
                  q = q.filter_by(section=section)
 
+        category = request.args.get("category")
+        if category and category not in ("All", "All Categories", "Select Category", ""):
+            cat_str = "Hifz+Nazira" if category == "Hifz + Nazira" else category
+            q = q.filter(or_(
+                Student.AdmissionCategory == cat_str,
+                Student.AdmissionCategory == category
+            ))
+
         if search:
             search_val = search.strip()
             like = f"%{search_val}%"
@@ -344,6 +352,11 @@ def get_students(current_user):
                     s = row
                     s_dict = student_to_dict(s)
                     
+                cat_val = getattr(s, 'AdmissionCategory', None) or getattr(s, 'Category', None) or ""
+                if cat_val == "Hifz+Nazira":
+                    cat_val = "Hifz + Nazira"
+                s_dict['category'] = cat_val
+
                 if include_fee_due:
                     s_dict['total_due'] = float(student_dues_map.get(s_dict["student_id"], 0.0))
                     

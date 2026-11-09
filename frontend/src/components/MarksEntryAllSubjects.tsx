@@ -9,6 +9,7 @@ interface Student {
     admission_no: string;
     roll_number: string | number;
     name: string;
+    category?: string;
 }
 
 interface Subject {
@@ -38,6 +39,7 @@ const MarksEntryAllSubjects: React.FC = () => {
     const [selectedClass, setSelectedClass] = useState<string>("");
     const [sections, setSections] = useState<string[]>([]);
     const [selectedSection, setSelectedSection] = useState<string>("");
+    const [selectedCategory, setSelectedCategory] = useState<string>("");
 
     const [tests, setTests] = useState<any[]>([]);
     const [selectedTestId, setSelectedTestId] = useState<string>("");
@@ -183,10 +185,18 @@ const MarksEntryAllSubjects: React.FC = () => {
                     branch: selectedBranch,
                     class: clsObj?.class_name,
                     section: selectedSection,
-                    academic_year: academicYear
+                    academic_year: academicYear,
+                    category: selectedCategory
                 }
             });
-            const studentsList = studentsRes.data.students || studentsRes.data || [];
+            let studentsList = studentsRes.data.students || studentsRes.data || [];
+            if (selectedCategory) {
+                const target = selectedCategory === "Hifz + Nazira" ? ["Hifz + Nazira", "Hifz+Nazira"] : [selectedCategory];
+                studentsList = studentsList.filter((s: any) => {
+                    const cat = s.category || s.AdmissionCategory || s.admission_category;
+                    return !cat || target.includes(cat);
+                });
+            }
             if (studentsList.length === 0) {
                 setMessage({ type: 'error', text: "No students found." });
                 setLoading(false);
@@ -219,7 +229,8 @@ const MarksEntryAllSubjects: React.FC = () => {
                             class_id: selectedClass,
                             section: selectedSection,
                             test_id: selectedTestId,
-                            subject_id: subj.id
+                            subject_id: subj.id,
+                            category: selectedCategory
                         }
                     });
 
@@ -375,7 +386,8 @@ const MarksEntryAllSubjects: React.FC = () => {
             const row: any = {
                 "Roll No": std.roll_number,
                 "Name": std.name,
-                "Admission No": std.admission_no
+                "Admission No": std.admission_no,
+                "Category": std.category || std.AdmissionCategory || '-'
             };
             subjects.filter(s => selectedSubjectIds.includes(s.id)).forEach(s => {
                 const m = marksData[std.student_id || std.id]?.[s.id];
@@ -395,7 +407,7 @@ const MarksEntryAllSubjects: React.FC = () => {
             <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Enter All Subject Marks</h2>
 
             {/* --- FILTERS --- */}
-            <div className="bg-white p-4 rounded shadow-sm mb-6 grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="bg-white p-4 rounded shadow-sm mb-6 grid grid-cols-1 md:grid-cols-6 gap-4">
                 {/* Class */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700">Class</label>
@@ -419,6 +431,20 @@ const MarksEntryAllSubjects: React.FC = () => {
                     >
                         <option value="">Select Section</option>
                         {sections.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                </div>
+
+                {/* Category */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Category</label>
+                    <select
+                        value={selectedCategory}
+                        onChange={e => setSelectedCategory(e.target.value)}
+                        className="mt-1 block w-full rounded-md border p-2 border-gray-300 shadow-sm"
+                    >
+                        <option value="">Select Category</option>
+                        <option value="Hifz">Hifz</option>
+                        <option value="Hifz + Nazira">Hifz + Nazira</option>
                     </select>
                 </div>
 
@@ -514,6 +540,7 @@ const MarksEntryAllSubjects: React.FC = () => {
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-12 bg-gray-50 z-10">Student Name</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Roll No</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adm No</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
 
                                     {/* Subject Columns */}
                                     {subjects.filter(s => selectedSubjectIds.includes(s.id)).map(s => {
@@ -540,6 +567,15 @@ const MarksEntryAllSubjects: React.FC = () => {
                                             <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 sticky left-12 bg-white">{student.name}</td>
                                             <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{student.roll_number}</td>
                                             <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{student.admission_no}</td>
+                                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {student.category || (student as any).AdmissionCategory ? (
+                                                    <span className="bg-indigo-50 text-indigo-700 text-xs px-2.5 py-1 rounded-full font-semibold border border-indigo-200">
+                                                        {student.category || (student as any).AdmissionCategory}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-400 text-xs">-</span>
+                                                )}
+                                            </td>
 
                                             {/* Marks Cells */}
                                             {subjects.filter(s => selectedSubjectIds.includes(s.id)).map(s => {
