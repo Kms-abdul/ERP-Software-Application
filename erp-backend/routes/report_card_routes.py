@@ -443,52 +443,135 @@ def get_student_report(current_user):
         cursor.execute(mapping_query, (test_id, academic_year, mapping_branch, class_id))
         mapped_months = cursor.fetchall()
         if not mapped_months:  
-    # Return empty attendance data when no months are mapped  
+            # Return empty attendance data when no months are mapped  
             monthly_attendance = []  
             total_present = 0  
             total_absent = 0  
             total_days = 0  
         else:  
+            # Sort mapped months chronologically
+            mapped_months = sorted(mapped_months, key=lambda m: (int(m['year']), int(m['month'])))
+
             attendance_query = """  
                 SELECT   
-                MONTHNAME(date) as month_name,  
-                MONTH(date) as month_num,  
-                YEAR(date) as year_num,  
-                COUNT(*) as total,  
-                SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) as present,  
-                SUM(CASE WHEN status IN ('Absent', 'Leave') THEN 1 ELSE 0 END) as absent  
-            FROM attendance  
-            WHERE student_id = %s AND academic_year = %s  
+                    MONTHNAME(date) as month_name,  
+                    MONTH(date) as month_num,  
+                    YEAR(date) as year_num,  
+                    COUNT(*) as total,  
+                    SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) as present,  
+                    SUM(CASE WHEN status IN ('Absent', 'Leave') THEN 1 ELSE 0 END) as absent  
+                FROM attendance  
+                WHERE student_id = %s AND academic_year = %s  
             """  
-        att_params = [student_id, academic_year]  
+            att_params = [student_id, academic_year]  
+          
+            conditions = []  
+            for m in mapped_months:  
+                conditions.append(f"(MONTH(date) = {m['month']} AND YEAR(date) = {m['year']})")  
+          
+            if conditions:  
+                attendance_query += " AND (" + " OR ".join(conditions) + ")"  
       
-        conditions = []  
-        for m in mapped_months:  
-            conditions.append(f"(MONTH(date) = {m['month']} AND YEAR(date) = {m['year']})")  
-      
-        if conditions:  
-            attendance_query += " AND (" + " OR ".join(conditions) + ")"  
-  
-        attendance_query += " GROUP BY YEAR(date), MONTH(date), MONTHNAME(date) ORDER BY YEAR(date), MONTH(date)"  
-      
-        cursor.execute(attendance_query, tuple(att_params))  
-        attendance_rows = cursor.fetchall()  
-      
-        monthly_attendance = []  
-        total_present = 0  
-        total_absent = 0  
-        total_days = 0  
-      
-        for row in attendance_rows:  
-            monthly_attendance.append({  
-                'month': row['month_name'][:3],  
-                'total': int(row['total']),  
-                'present': int(row['present']),  
-                'absent': int(row['absent'])  
-            })  
-            total_present += int(row['present'])  
-            total_absent += int(row['absent'])  
-            total_days += int(row['total'])
+            attendance_query += " GROUP BY YEAR(date), MONTH(date), MONTHNAME(date) ORDER BY YEAR(date), MONTH(date)"  
+          
+            cursor.execute(attendance_query, tuple(att_params))  
+            attendance_rows = cursor.fetchall()  
+            att_map = {(int(r['month_num']), int(r['year_num'])): r for r in attendance_rows}
+
+            # Resolve branch_id for holiday/weekoff check (matching Attendance Register calculation)
+            branch_id = None
+            try:
+                b_code = student.get('branch_code') or student.get('raw_branch')
+                b_name = student.get('branch_name')
+                b_obj = Branch.query.filter(
+                    (Branch.branch_code == b_code) | (Branch.branch_name == b_name) | (Branch.branch_name == b_code)
+                ).first()
+                if b_obj:
+                    branch_id = b_obj.id
+            except Exception as e:
+                logger.warning(f"Could not resolve branch_id for working days: {e}")
+
+            monthly_attendance = []  
+            total_present = 0  
+            total_absent = 0  
+            total_days = 0  
+
+            import calendar
+            from datetime import date as dt_date
+            from routes.config_routes import is_weekoff_or_holiday
+            month_names_abbr = ["", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February", "March", "April"]
+            # Standard month abbreviation map
+            std_month_abbr = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+            for m in mapped_months:
+                m_num = int(m['month'])
+                y_num = int(m['year'])
+
+                att_row = att_map.get((m_num, y_num))
+                present = int(att_row['present'] or 0) if att_row else 0
+                recorded_absent = int(att_row['absent'] or 0) if att_row else 0
+                month_abbr = std_month_abbr[m_num] if 1 <= m_num <= 12 else f"M{m_num}"
+
+                # 1. Calendar Working Days: days in month minus holidays & weekly-offs (matching Attendance Register)
+                calendar_working_days = 0
+                try:
+                    days_in_month = calendar.monthrange(y_num, m_num)[1]
+                    blocked_count = 0
+                    for day_num in range(1, days_in_month + 1):
+                        d_obj = dt_date(y_num, m_num, day_num)
+                        res = is_weekoff_or_holiday(d_obj, branch_id, academic_year, class_id=class_id)
+                        if res.get("is_weekoff") or res.get("is_holiday"):
+                            blocked_count += 1
+                    calendar_working_days = days_in_month - blocked_count
+                except Exception as e:
+                    logger.warning(f"Error calculating calendar working days for {m_num}/{y_num}: {e}")
+
+                # 2. Distinct dates attendance was conducted for this class in this month
+                class_distinct_days = 0
+                try:
+                    cursor.execute("""
+                        SELECT COUNT(DISTINCT a.date) as active_days
+                        FROM attendance a
+                        JOIN student_academic_records sar ON a.student_id = sar.student_id
+                        WHERE (sar.class_name = %s OR sar.class_name = %s)
+                          AND sar.academic_year = %s
+                          AND MONTH(a.date) = %s
+                          AND YEAR(a.date) = %s
+                    """, (student['class_name'], f"Class {student['class_name']}", academic_year, m_num, y_num))
+                    act_row = cursor.fetchone()
+                    if act_row and act_row.get('active_days'):
+                        class_distinct_days = int(act_row['active_days'])
+                except Exception as e:
+                    logger.warning(f"Error querying class active days for {m_num}/{y_num}: {e}")
+
+                # Official working days calculation
+                if class_distinct_days > 0 and calendar_working_days > 0:
+                    # Partial start month (e.g. May where school reopened for only a few days)
+                    if class_distinct_days < calendar_working_days and class_distinct_days <= 10:
+                        month_total = class_distinct_days
+                    else:
+                        month_total = calendar_working_days
+                elif calendar_working_days > 0:
+                    month_total = calendar_working_days
+                elif class_distinct_days > 0:
+                    month_total = class_distinct_days
+                else:
+                    month_total = present + recorded_absent
+
+                # Total should be at least as large as the student's recorded count
+                month_total = max(month_total, present + recorded_absent)
+                # Absent is month_total - present (ensures Present + Absent == Total Working Days)
+                month_absent = max(recorded_absent, month_total - present) if month_total >= present else recorded_absent
+
+                monthly_attendance.append({  
+                    'month': month_abbr,  
+                    'total': month_total,  
+                    'present': present,  
+                    'absent': month_absent  
+                })  
+                total_present += present  
+                total_absent += month_absent  
+                total_days += month_total
         
         # ========== 6. Get Student's Academic History ==========
         history_query = """
