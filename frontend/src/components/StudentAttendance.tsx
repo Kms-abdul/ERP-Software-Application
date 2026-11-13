@@ -2209,6 +2209,38 @@ const DeleteAttendanceTab: React.FC = () => {
         }
     };
 
+    const handleCleanupHolidayAttendance = async () => {
+        if (!selectedClass) return alert("Please select a class first.");
+        const monthName = new Date(0, classMonth - 1).toLocaleString('default', { month: 'long' });
+        if (!window.confirm(`⚠️ CLEANUP ATTENDANCE ON HOLIDAYS\n\nThis will scan Class ${selectedClass}${selectedSection ? ` (${selectedSection})` : ''} for ${monthName} ${classYear} and delete any attendance records that were marked on dates currently declared as holidays or weekly offs.\n\nProceed?`)) {
+            return;
+        }
+        setLoading(true);
+        setNotification(null);
+        try {
+            const branch = localStorage.getItem('currentBranch') || 'All';
+            const res = await api.post('/attendance/cleanup-holidays', {
+                class: selectedClass,
+                section: selectedSection,
+                month: classMonth,
+                year: classYear,
+                branch: branch === "All Branches" || branch === "All" ? "All" : branch
+            });
+            setNotification({
+                type: 'success',
+                text: res.data?.message || `Cleanup complete: deleted ${res.data?.deleted_count || 0} records.`
+            });
+        } catch (err: any) {
+            console.error("Cleanup holiday attendance error", err);
+            setNotification({
+                type: 'error',
+                text: `Cleanup failed: ${err.response?.data?.error || err.message}`
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const filteredStudents = students.filter(s => {
         if (!studentSearch.trim()) return true;
         const q = studentSearch.toLowerCase();
@@ -2568,7 +2600,17 @@ const DeleteAttendanceTab: React.FC = () => {
                                             />
                                         </div>
                                     </div>
-                                    <div className="flex justify-end pt-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-100">
+                                        <button
+                                            type="button"
+                                            onClick={handleCleanupHolidayAttendance}
+                                            disabled={loading || !selectedClass}
+                                            className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 px-3 py-2 rounded-md font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                                            title="Scan and delete attendance records marked on dates that were later declared as holidays or weekly offs"
+                                        >
+                                            <span>🧹</span>
+                                            <span>Clean Attendance on Declared Holidays ({new Date(0, classMonth - 1).toLocaleString('default', { month: 'short' })})</span>
+                                        </button>
                                         <button
                                             type="button"
                                             onClick={handleDeleteClassAttendance}
