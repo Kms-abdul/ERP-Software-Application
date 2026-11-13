@@ -52,9 +52,9 @@ export interface AcademicPerformanceItem {
 
 export interface MonthlyAttendance {
     month: string;
-    total: number;
-    present: number;
-    absent: number;
+    total: number | string;
+    present: number | string;
+    absent: number | string;
 }
 
 export interface AttendanceSummary {

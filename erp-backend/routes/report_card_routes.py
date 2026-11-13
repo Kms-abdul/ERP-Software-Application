@@ -520,9 +520,22 @@ def get_student_report(current_user):
                 y_num = int(m['year'])
 
                 month_recs = [r for r in valid_student_records if r['month'] == m_num and r['year'] == y_num]
-                present = sum(1 for r in month_recs if r['status'] == 'Present')
-                recorded_absent = sum(1 for r in month_recs if r['status'] in ('Absent', 'Leave'))
+                valid_records_in_month = [r for r in month_recs if r['status'] in ('Present', 'Absent', 'Leave')]
                 month_abbr = std_month_abbr[m_num] if 1 <= m_num <= 12 else f"M{m_num}"
+
+                # If student has NO attendance records for this month (e.g. joined later, all days are '-'):
+                if len(valid_records_in_month) == 0:
+                    monthly_attendance.append({
+                        'month': month_abbr,
+                        'total': '-',
+                        'present': '-',
+                        'absent': '-'
+                    })
+                    # Do not add to total_present, total_absent, or total_days (0 absent days for this unjoined/unrecorded month)
+                    continue
+
+                present = sum(1 for r in valid_records_in_month if r['status'] == 'Present')
+                recorded_absent = sum(1 for r in valid_records_in_month if r['status'] in ('Absent', 'Leave'))
 
                 # 1. Calendar Working Days: days in month minus holidays & weekly-offs (matching Attendance Register)
                 calendar_working_days = 0
