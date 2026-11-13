@@ -13,7 +13,7 @@ import { formatReportBranch } from '../utils/branchHelper';
 
 const HIFZ_TARGET_X_TICKS = Array.from({ length: 11 }, (_, i) => i * 3);
 const HIFZ_TARGET_Y_TICKS = [0, 5, 10, 15, 20, 25, 30];
-const HIFZ_CHART_HEIGHT = 190;
+const HIFZ_CHART_HEIGHT = 215;
 
 function useMeasuredChartSize(containerRef: React.RefObject<HTMLDivElement | null>) {
   const [size, setSize] = React.useState({ width: 0, height: HIFZ_CHART_HEIGHT });
@@ -199,8 +199,8 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
               overflow: hidden !important;
             }
             .hifz-target-chart .hifz-target-chart-plot {
-              height: 190px !important;
-              min-height: 190px !important;
+              height: 215px !important;
+              min-height: 215px !important;
               width: 100% !important;
               max-width: 100% !important;
             }
@@ -212,6 +212,11 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
             .hifz-target-chart svg {
               width: 100% !important;
               max-width: 100% !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .recharts-wrapper,
+            .recharts-surface {
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
@@ -282,10 +287,10 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
               <span>HIFZ / NAZIRA</span>
               <span dir="rtl" className="font-arabic">حفظ قرآن رپورٹ</span>
             </div>
-            <div className="p-2 flex-1 flex items-center justify-center min-h-[240px] min-w-[620]">
+            <div className="p-2 flex-1 flex items-center justify-center min-h-[220px]">
               {hifzChartData.length > 0 ? (
                 <ResponsiveContainer width={400} height={200}>
-                  <BarChart data={hifzChartData} barSize={20}>
+                  <BarChart data={hifzChartData} barSize={34}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="name" fontSize={10} />
                     <YAxis fontSize={10} domain={[0, 'auto']} />
@@ -309,13 +314,13 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
               <span dir="rtl" className="font-arabic">حفظ قرآن رپورٹ</span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-sm">
                 <thead className="bg-gray-100 border-b border-indigo-900">
                   <tr>
-                    <th className="p-2 text-left font-arabic">گریڈ</th>
-                    <th className="p-2 text-left font-arabic">حاصل شدہ نمبرات</th>
-                    <th className="p-2 text-left font-arabic">کل نمبرات</th>
-                    <th className="p-2 text-right font-arabic">مضامین</th>
+                    <th className="p-2.5 text-left font-arabic text-xs md:text-sm font-bold text-gray-800">گریڈ</th>
+                    <th className="p-2.5 text-left font-arabic text-xs md:text-sm font-bold text-gray-800">حاصل شدہ نمبرات</th>
+                    <th className="p-2.5 text-left font-arabic text-xs md:text-sm font-bold text-gray-800">کل نمبرات</th>
+                    <th className="p-2.5 text-right font-arabic text-xs md:text-sm font-bold text-gray-800">مضامین</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -325,9 +330,9 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
 
                     return (
                       <tr key={idx} className={`border-b ${h.subject === 'Total/Grade' ? 'border-t-2 border-indigo-900 bg-gray-50 font-bold' : 'border-gray-200'}`}>
-                        <td className="p-2">
+                        <td className="p-2.5">
                           {h.grade && h.grade !== '-' ? (
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] text-white font-bold
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs text-white font-bold
                               ${['A1', 'A2'].includes(h.grade) ? 'bg-green-600' :
                                 ['B1', 'B2'].includes(h.grade) ? 'bg-orange-400' :
                                   ['C', 'C1', 'C2'].includes(h.grade) ? 'bg-orange-600' : 'bg-red-500'}`}>
@@ -337,10 +342,10 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
                             <span className="text-gray-400">-</span>
                           )}
                         </td>
-                        <td className="p-2 font-semibold">{h.securedMarks || 0}</td>
-                        <td className="p-2 font-medium">{h.totalMarks || 0}</td>
-                        <td className="p-2 text-right font-bold">
-                          <span className="block text-[10px] text-gray-600 font-arabic" dir="rtl">
+                        <td className="p-2.5 font-semibold text-gray-900 text-sm">{h.securedMarks || 0}</td>
+                        <td className="p-2.5 font-medium text-gray-700 text-sm">{h.totalMarks || 0}</td>
+                        <td className="p-2.5 text-right font-bold text-gray-900 text-sm">
+                          <span className="block text-xs text-gray-600 font-arabic" dir="rtl">
                             {h.urduSubject || ' '}
                           </span>
                           {h.subject}
@@ -367,28 +372,28 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
               <span>STUDENT PERFORMANCE</span>
               <span dir="rtl" className="font-arabic">طلبہ کا مظاہرہ</span>
             </div>
-            <div className="p-4 flex-1 grid grid-cols-[1fr,1.5fr] items-center min-h-[220px]">
-              <div className="flex flex-col justify-center space-y-2">
+            <div className="p-4 flex-1 flex items-center justify-between min-h-[240px] gap-2">
+              <div className="flex flex-col justify-center space-y-2.5 flex-1 min-w-0">
                 {data.academicPerformance
                   .filter(ap => ap.subject && ap.subject !== '')
                   .map((ap, idx) => (
-                    <div key={idx} className="flex items-center space-x-2 text-[10px] font-medium">
-                      <div className="w-3 h-3" style={{ backgroundColor: ap.color || '#f8f8f8ff' }}></div>
-                      <span>{ap.subject}: {ap.percentage || 0}%</span>
+                    <div key={idx} className="flex items-center space-x-2 text-xs md:text-sm font-semibold text-gray-800">
+                      <div className="w-3.5 h-3.5 rounded-sm flex-shrink-0" style={{ backgroundColor: ap.color || '#f8f8f8ff' }}></div>
+                      <span className="truncate">{ap.subject}: {ap.percentage || 0}%</span>
                     </div>
                   ))
                 }
               </div>
-              <div className="relative" style={{ width: '220px', height: '220px' }}>
+              <div className="flex items-center justify-center flex-shrink-0" style={{ width: '240px', height: '240px' }}>
                 {academicPieData.length > 0 ? (
-                  <ResponsiveContainer width={220} height={220}>
+                  <ResponsiveContainer width={240} height={240}>
                     <PieChart>
                       <Pie
                         data={academicPieData}
                         cx="50%"
                         cy="50%"
-                        innerRadius={40}
-                        outerRadius={70}
+                        innerRadius={30}
+                        outerRadius={95}
                         paddingAngle={0}
                         startAngle={90}
                         endAngle={-270}
@@ -416,13 +421,13 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
               <span dir="rtl" className="font-arabic">طلبہ کا مظاہرہ</span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-sm">
                 <thead className="bg-gray-100 border-b border-indigo-900">
                   <tr>
-                    <th className="p-2 text-left font-arabic">گریڈ</th>
-                    <th className="p-2 text-left font-arabic">حاصل شدہ نمبرات</th>
-                    <th className="p-2 text-left font-arabic">کل نمبرات</th>
-                    <th className="p-2 text-right font-arabic">مضامین</th>
+                    <th className="p-2.5 text-left font-arabic text-xs md:text-sm font-bold text-gray-800">گریڈ</th>
+                    <th className="p-2.5 text-left font-arabic text-xs md:text-sm font-bold text-gray-800">حاصل شدہ نمبرات</th>
+                    <th className="p-2.5 text-left font-arabic text-xs md:text-sm font-bold text-gray-800">کل نمبرات</th>
+                    <th className="p-2.5 text-right font-arabic text-xs md:text-sm font-bold text-gray-800">مضامین</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -430,9 +435,9 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
                     .filter(ap => ap.subject && ap.subject !== '')
                     .map((ap, idx) => (
                       <tr key={idx} className={`border-b ${ap.subject === 'Total/Grade' ? 'border-t-2 border-indigo-900 bg-gray-50 font-bold' : 'border-gray-200'}`}>
-                        <td className="p-2">
+                        <td className="p-2.5">
                           {ap.grade && ap.grade !== '-' ? (
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] text-white font-bold
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs text-white font-bold
                               ${['A1', 'A2'].includes(ap.grade) ? 'bg-green-600' :
                                 ['B1', 'B2'].includes(ap.grade) ? 'bg-orange-400' :
                                   ['C', 'C1', 'C2'].includes(ap.grade) ? 'bg-orange-600' : 'bg-red-500'}`}>
@@ -442,10 +447,10 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
                             <span className="text-gray-400">-</span>
                           )}
                         </td>
-                        <td className="p-2 font-medium">{ap.securedMarks || 0}</td>
-                        <td className="p-2 font-medium">{ap.totalMarks || 0}</td>
-                        <td className="p-2 text-right font-bold">
-                          <span className="block text-[10px] text-gray-600 font-arabic" dir="rtl">
+                        <td className="p-2.5 font-semibold text-gray-900 text-sm">{ap.securedMarks || 0}</td>
+                        <td className="p-2.5 font-medium text-gray-700 text-sm">{ap.totalMarks || 0}</td>
+                        <td className="p-2.5 text-right font-bold text-gray-900 text-sm">
+                          <span className="block text-xs text-gray-600 font-arabic" dir="rtl">
                             {ap.urduSubject || ' '}
                           </span>
                           {ap.subject}
@@ -468,76 +473,56 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-0.1">
         <div className="border border-indigo-900 rounded-lg overflow-hidden flex flex-col shadow-sm">
           <div className="bg-[#4a235a] text-white px-4 py-2 text-sm font-semibold uppercase">Attendance</div>
-          <div className="p-4">
-            <div className="flex justify-between items-start mb-4">
-              <div className="w-24 h-24">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={attendancePieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={25}
-                      outerRadius={45}
-                      dataKey="value"
-                      startAngle={90}
-                      endAngle={-270}
-                    >
-                      {attendancePieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex-1 ml-4">
-                <h4 className="text-red-500 text-xs font-bold mb-2 uppercase text-center">Monthly Attendance</h4>
-                {data.attendance?.monthly && data.attendance.monthly.length > 0 ? (
-                  <table className="w-full text-[10px] border border-gray-200">
+          <div className="p-4 flex-1 flex flex-col justify-between">
+            <div className="w-full">
+              <h4 className="text-red-600 text-sm font-bold mb-3 uppercase text-center tracking-wide">Monthly Attendance</h4>
+              {data.attendance?.monthly && data.attendance.monthly.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs md:text-sm border border-indigo-200 rounded-md overflow-hidden">
                     <thead>
                       <tr className="bg-indigo-100">
-                        <th className="border p-1"></th>
+                        <th className="border border-indigo-200 p-2 font-bold text-indigo-950 text-center w-24"></th>
                         {data.attendance.monthly.map((m, i) => (
-                          <th key={i} className="border p-1">{m.month || `Month ${i + 1}`}</th>
+                          <th key={i} className="border border-indigo-200 p-2 text-center font-bold text-indigo-950">{m.month || `Month ${i + 1}`}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
-                        <td className="border p-1 font-bold bg-gray-50 uppercase">Total</td>
+                        <td className="border border-indigo-200 p-2 font-bold bg-gray-50 uppercase text-gray-800 text-center">Total</td>
                         {data.attendance.monthly.map((m, i) => (
-                          <td key={i} className="border p-1 text-center">{m.total || 0}</td>
+                          <td key={i} className="border border-indigo-200 p-2 text-center font-bold text-gray-900">{m.total || 0}</td>
                         ))}
                       </tr>
                       <tr>
-                        <td className="border p-1 font-bold bg-gray-50 uppercase">Present</td>
+                        <td className="border border-indigo-200 p-2 font-bold bg-gray-50 uppercase text-gray-800 text-center">Present</td>
                         {data.attendance.monthly.map((m, i) => (
-                          <td key={i} className="border p-1 text-center">{m.present || 0}</td>
+                          <td key={i} className="border border-indigo-200 p-2 text-center font-bold text-green-700 bg-green-50/40">{m.present || 0}</td>
                         ))}
                       </tr>
                       <tr>
-                        <td className="border p-1 font-bold bg-gray-50 uppercase">Absent</td>
+                        <td className="border border-indigo-200 p-2 font-bold bg-gray-50 uppercase text-gray-800 text-center">Absent</td>
                         {data.attendance.monthly.map((m, i) => (
-                          <td key={i} className="border p-1 text-center">{m.absent || 0}</td>
+                          <td key={i} className="border border-indigo-200 p-2 text-center font-bold text-red-700 bg-red-50/40">{m.absent || 0}</td>
                         ))}
                       </tr>
                     </tbody>
                   </table>
-                ) : (
-                  <p className="text-gray-400 text-center text-sm">No attendance data available</p>
-                )}
-              </div>
+                </div>
+              ) : (
+                <p className="text-gray-400 text-center text-sm py-4">No attendance data available</p>
+              )}
             </div>
-            <div className="flex justify-center space-x-6 text-[10px] font-bold mt-2">
+            <div className="flex flex-wrap justify-center items-center gap-4 sm:gap-6 text-xs md:text-sm font-bold mt-4 pt-3 border-t border-gray-200">
               <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-green-400"></div>
-                <span>PRESENT : {data.attendance?.summary?.presentCount || 0} ({data.attendance?.summary?.presentPercentage || 0}%)</span>
+                <div className="w-3.5 h-3.5 bg-green-500 rounded-sm"></div>
+                <span className="text-green-800">PRESENT : {data.attendance?.summary?.presentCount || 0} ({data.attendance?.summary?.presentPercentage || 0}%)</span>
               </div>
               <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-red-400"></div>
-                <span>ABSENT : {data.attendance?.summary?.absentCount || 0} ({data.attendance?.summary?.absentPercentage || 0}%)</span>
+                <div className="w-3.5 h-3.5 bg-red-500 rounded-sm"></div>
+                <span className="text-red-800">ABSENT : {data.attendance?.summary?.absentCount || 0} ({data.attendance?.summary?.absentPercentage || 0}%)</span>
               </div>
-              <div className="flex items-center space-x-2 text-indigo-900">
+              <div className="flex items-center space-x-2 text-indigo-950">
                 <span>TOTAL : {data.attendance?.summary?.totalCount || 0}</span>
               </div>
             </div>
@@ -548,13 +533,13 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
           <div className="bg-[#1a5276] text-white px-4 py-2 text-sm font-semibold">HIFZ TARGET LEVEL</div>
           <div className="p-2 min-w-0 flex-1 flex flex-col justify-center">
             {data.hifzTargetLevel && data.hifzTargetLevel.length > 0 ? (
-              <div ref={hifzChartRef} className="hifz-target-chart-plot h-[190px] w-full min-w-0">
+              <div ref={hifzChartRef} className="hifz-target-chart-plot h-[215px] w-full min-w-0">
                 {hifzChartSize.width > 0 && (
                   <LineChart
                     width={hifzChartSize.width}
                     height={hifzChartSize.height}
                     data={data.hifzTargetLevel}
-                    margin={{ top: 8, right: 28, left: 2, bottom: 20 }}
+                    margin={{ top: 8, right: 28, left: 2, bottom: 28 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                     <XAxis
@@ -565,7 +550,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
                       allowDecimals={false}
                       padding={{ left: 8, right: 8 }}
                       tickMargin={4}
-                      label={{ value: 'MONTHS', position: 'insideBottom', offset: -4, fontSize: 9 }}
+                      label={{ value: 'MONTHS', position: 'insideBottom', offset: -2, fontSize: 9, fill: '#4b5563' }}
                       fontSize={9}
                     />
                     <YAxis
@@ -579,7 +564,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
                       fontSize={9}
                     />
                     <Tooltip />
-                    <Legend iconType="circle" verticalAlign="bottom" wrapperStyle={{ fontSize: '10px', paddingTop: 6 }} />
+                    <Legend iconType="circle" verticalAlign="bottom" wrapperStyle={{ fontSize: '10px', paddingTop: 20 }} />
                     <Line
                       type="monotone"
                       dataKey="targetParas"
