@@ -250,7 +250,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-0.5">
         <div className="border border-indigo-900 rounded-lg overflow-hidden shadow-sm">
           <div className="bg-[#4a235a] text-white px-4 py-2 text-sm font-semibold">Student Detail</div>
-          <div className="p-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm font-semibold">
+          <div className="p-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-m font-semibold">
             <span className="text-gray-700 whitespace-nowrap">Student Name</span>
             <span className="text-gray-900">: {data.student?.studentName || 'N/A'}</span>
             <span className="text-gray-700 whitespace-nowrap">Father's Name</span>
