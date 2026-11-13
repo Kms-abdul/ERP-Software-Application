@@ -242,7 +242,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
         </div>
       </div>
 
-      <div className="bg-violet-800 text-white text-center py-2 font-bold tracking-widest text-lg mb-0 shadow-md uppercase">
+      <div className="bg-red-700 text-white text-center py-2 font-bold tracking-widest text-lg mb-1 shadow-md uppercase">
         {data.reportTitle || 'Student Progress Report'}
       </div>
 
@@ -279,7 +279,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-0.5">
           <div className="border border-indigo-900 rounded-lg overflow-hidden flex flex-col shadow-sm">
             <div className="bg-[#4a235a] text-white px-4 py-2 text-sm font-semibold flex justify-between">
-              <span>HIFZ</span>
+              <span>HIFZ / NAZIRA</span>
               <span dir="rtl" className="font-arabic">حفظ قرآن رپورٹ</span>
             </div>
             <div className="p-2 flex-1 flex items-center justify-center min-h-[240px] min-w-[620]">
@@ -305,7 +305,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
 
           <div className="border border-indigo-900 rounded-lg overflow-hidden shadow-sm">
             <div className="bg-[#1a5276] text-white px-4 py-2 text-sm font-semibold flex justify-between">
-              <span>HIFZ REPORT</span>
+              <span>HIFZ / NAZIRA REPORT</span>
               <span dir="rtl" className="font-arabic">حفظ قرآن رپورٹ</span>
             </div>
             <div className="overflow-x-auto">
@@ -363,7 +363,10 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
       {data.academicPerformance && data.academicPerformance.length > 0 && data.academicPerformance.some(ap => ap.subject && ap.subject !== '') ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-0.5">
           <div className="border border-indigo-900 rounded-lg overflow-hidden flex flex-col shadow-sm">
-            <div className="bg-[#4a235a] text-white px-4 py-2 text-sm font-semibold">ACADEMIC PERFORMANCE</div>
+            <div className="bg-[#4a235a] text-white px-4 py-2 text-sm font-semibold flex justify-between">
+              <span>STUDENT PERFORMANCE</span>
+              <span dir="rtl" className="font-arabic">طلبہ کا مظاہرہ</span>
+            </div>
             <div className="p-4 flex-1 grid grid-cols-[1fr,1.5fr] items-center min-h-[220px]">
               <div className="flex flex-col justify-center space-y-2">
                 {data.academicPerformance
@@ -409,8 +412,8 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
 
           <div className="border border-indigo-900 rounded-lg overflow-hidden shadow-sm">
             <div className="bg-[#1a5276] text-white px-4 py-2 text-sm font-semibold flex justify-between">
-              <span>ACADEMIC PERFORMANCE</span>
-              <span dir="rtl" className="font-arabic">تعلیمی مظاہرہ</span>
+              <span>STUDENT PERFORMANCE</span>
+              <span dir="rtl" className="font-arabic">طلبہ کا مظاہرہ</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -616,26 +619,23 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
           <span className="font-bold text-sm block">: Teacher's Remark</span>
         </div>
         <div className="pt-6 text-gray-700 italic mt-2 min-h-[40px]">
-          {data.teacherRemark || 'No remarks provided.'}
+          {data.teacherRemark || ''}
         </div>
       </div>
 
       {/* Footer Signatures */}
-      <div className="flex justify-between items-end pt-2 border-t border-gray-200">
+      <div className="flex justify-between items-end pt-5 border-t border-gray-200">
         <div className="text-center">
-          <div className="border-t-2 border-dotted border-gray-400 w-48 mb-2 mx-auto"></div>
           <span className="font-bold text-sm text-indigo-900">Signature of Parent</span>
         </div>
         <div className="text-center">
-          <div className="border-t-2 border-dotted border-gray-400 w-48 mb-2 mx-auto"></div>
           <span className="font-bold text-sm text-indigo-900">Signature of Teacher</span>
         </div>
         <div className="text-center">
-          <div className="border-t-2 border-dotted border-gray-400 w-48 mb-2 mx-auto"></div>
           <span className="font-bold text-sm text-indigo-900">Signature of Principal</span>
         </div>
       </div>
-    </div>
+    </div >
   );
 };
 

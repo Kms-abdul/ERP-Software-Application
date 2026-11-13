@@ -22,7 +22,7 @@ interface StudentAttendanceProps {
     defaultTab?: AttendanceTab;
 }
 
-type AttendanceTab = 'take' | 'today' | 'register' | 'absent-report';
+type AttendanceTab = 'take' | 'today' | 'register' | 'delete' | 'absent-report';
 
 interface AttendanceHeaderProps {
     activeTab: AttendanceTab;
@@ -32,8 +32,10 @@ interface AttendanceHeaderProps {
 
 const AttendanceHeader: React.FC<AttendanceHeaderProps> = ({ activeTab, onTabChange, onAction }) => {
     const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-    const buttonStyle = "px-3 py-1.5 text-sm border border-gray-300 bg-white text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500";
-    const activeButtonStyle = "px-3 py-1.5 text-sm border border-transparent bg-sky-600 text-white rounded-md";
+    const buttonStyle = "px-3 py-1.5 text-sm border border-gray-300 bg-white text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 font-medium transition-colors";
+    const activeButtonStyle = "px-3 py-1.5 text-sm border border-transparent bg-sky-600 text-white rounded-md font-medium shadow-sm";
+    const deleteActiveStyle = "px-3 py-1.5 text-sm border border-transparent bg-red-600 text-white rounded-md font-semibold shadow-sm";
+    const deleteButtonStyle = "px-3 py-1.5 text-sm border border-red-300 bg-red-50 text-red-700 hover:bg-red-100 rounded-md font-semibold transition-colors";
 
     const Dropdown: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => {
         const isOpen = openDropdown === title;
@@ -84,9 +86,11 @@ const AttendanceHeader: React.FC<AttendanceHeaderProps> = ({ activeTab, onTabCha
                     </h2>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-
                     <button className={activeTab === 'take' ? activeButtonStyle : buttonStyle} onClick={() => onTabChange('take')}>Take Attendance</button>
                     <button className={activeTab === 'register' ? activeButtonStyle : buttonStyle} onClick={() => onTabChange('register')}>Register View</button>
+                    <button className={activeTab === 'delete' ? deleteActiveStyle : deleteButtonStyle} onClick={() => onTabChange('delete')}>
+                        Delete Attendance
+                    </button>
                     <Dropdown title="Reports">
                         <DropdownItem action="Absent Report">Absent Report</DropdownItem>
                         <DropdownItem action="SMS">Send SMS To All Present Students</DropdownItem>
@@ -231,6 +235,32 @@ const TakeAttendanceForm: React.FC = () => {
         setAttendance(updated);
     };
 
+    const handleDeleteDateAttendance = async () => {
+        if (!selectedClass || !attendanceDate) return;
+        if (!window.confirm(`Are you sure you want to delete ALL attendance records for Class ${selectedClass}${selectedSection ? ` (Section ${selectedSection})` : ''} on ${attendanceDate}?\nThis will remove attendance for all students on this date.`)) {
+            return;
+        }
+        setLoading(true);
+        try {
+            const academicYear = localStorage.getItem('academicYear') || '';
+            const res = await api.delete('/attendance', {
+                data: {
+                    date: attendanceDate,
+                    class: selectedClass,
+                    section: selectedSection,
+                    academic_year: academicYear
+                }
+            });
+            alert(res.data?.message || "Attendance deleted successfully for this date.");
+            handleGetStudents();
+        } catch (error: any) {
+            console.error("Delete attendance error", error);
+            alert(`Failed to delete attendance: ${error.response?.data?.error || error.message}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleSave = async () => {
         setLoading(true);
         try {
@@ -313,9 +343,19 @@ const TakeAttendanceForm: React.FC = () => {
 
                     {students.length > 0 && (
                         <div className="overflow-x-auto border rounded-lg">
-                            <div className="p-2 bg-gray-50 border-b flex gap-2">
-                                <button onClick={() => markAll('Present')} className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded border border-green-200 hover:bg-green-200">Mark All Present</button>
-                                <button onClick={() => markAll('Absent')} className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded border border-red-200 hover:bg-red-200">Mark All Absent</button>
+                            <div className="p-2 bg-gray-50 border-b flex flex-wrap items-center gap-2">
+                                <button onClick={() => markAll('Present')} className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded border border-green-200 hover:bg-green-200 font-medium">Mark All Present</button>
+                                <button onClick={() => markAll('Absent')} className="text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded border border-red-200 hover:bg-red-200 font-medium">Mark All Absent</button>
+                                <button onClick={() => markAll('')} className="text-xs bg-gray-100 text-gray-700 px-2.5 py-1 rounded border border-gray-200 hover:bg-gray-200 font-medium">Clear All</button>
+                                {isUpdateMode && (
+                                    <button
+                                        onClick={handleDeleteDateAttendance}
+                                        disabled={loading}
+                                        className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded font-semibold ml-auto transition-colors shadow-sm"
+                                    >
+                                        Delete Attendance for {attendanceDate}
+                                    </button>
+                                )}
                             </div>
                             <table className="min-w-full divide-y divide-gray-200 text-m">
                                 <thead className="bg-gray-50">
@@ -337,7 +377,7 @@ const TakeAttendanceForm: React.FC = () => {
                                             <td className="px-4 py-2 whitespace-nowrap text-gray-500">{student.father}</td>
                                             <td className="px-4 py-2 whitespace-nowrap text-gray-500">{student.smsNo || student.fatherMobile}</td>
                                             <td className="px-4 py-2 whitespace-nowrap">
-                                                <div className="flex items-center space-x-5">
+                                                <div className="flex items-center space-x-4">
                                                     {[
                                                         { val: 'Present', label: 'P', color: 'green' },
                                                         { val: 'Absent', label: 'A', color: 'red' },
@@ -368,6 +408,21 @@ const TakeAttendanceForm: React.FC = () => {
                                                             </label>
                                                         );
                                                     })}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if ((student as any).is_locked) {
+                                                                alert("This student record is locked for this academic year.");
+                                                            } else {
+                                                                handleStatusChange(student.student_id!, '');
+                                                            }
+                                                        }}
+                                                        disabled={(student as any).is_locked}
+                                                        title="Clear / Unmark"
+                                                        className={`text-xs px-2 py-0.5 rounded border transition-colors ${!attendance[student.student_id!] ? 'bg-gray-200 text-gray-800 font-bold border-gray-400' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100 border-gray-200'}`}
+                                                    >
+                                                        Clear
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -614,6 +669,30 @@ const RegisterViewTab: React.FC = () => {
         );
     };
 
+    const handleDeleteStudentMonth = async (student: any) => {
+        const monthName = new Date(0, selectedMonth - 1).toLocaleString('default', { month: 'long' });
+        if (!window.confirm(`Are you sure you want to delete ALL attendance records for ${student.name} (${student.admNo || ''}) for ${monthName} ${selectedYear}?\n\nThis will remove their attendance for this entire month.`)) {
+            return;
+        }
+        setLoading(true);
+        try {
+            const res = await api.delete('/attendance', {
+                data: {
+                    student_id: student.student_id,
+                    month: selectedMonth,
+                    year: selectedYear
+                }
+            });
+            alert(res.data?.message || `Attendance deleted for ${student.name} for ${monthName}.`);
+            handleGetReport();
+        } catch (error: any) {
+            console.error("Failed to delete month attendance", error);
+            alert(`Failed to delete attendance: ${error.response?.data?.error || error.message}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="p-4">
             <div className="bg-white rounded-lg shadow-md border">
@@ -696,6 +775,7 @@ const RegisterViewTab: React.FC = () => {
                                         <th className="px-2 py-2 text-center font-medium text-gray-700 bg-blue-50">Absent</th>
                                         <th className="px-2 py-2 text-center font-medium text-gray-700 bg-blue-50">Total Working Days</th>
                                         <th className="px-2 py-2 text-center font-medium text-gray-700 bg-blue-50">Attendance %</th>
+                                        <th className="px-2 py-2 text-center font-medium text-red-700 bg-red-50 border-l border-red-100">Action</th>
                                     </tr>
 
                                 </thead>
@@ -759,6 +839,15 @@ const RegisterViewTab: React.FC = () => {
                                                 <td className="px-2 py-1 text-center font-bold text-red-700 bg-blue-50">{absentCount}</td>
                                                 <td className="px-2 py-1 text-center font-semibold text-gray-700 bg-blue-50">{workingDays}</td>
                                                 <td className="px-2 py-1 text-center font-bold text-blue-700 bg-blue-50">{percentage}%</td>
+                                                <td className="px-2 py-1 text-center bg-white border-l border-gray-100">
+                                                    <button
+                                                        onClick={() => handleDeleteStudentMonth(student)}
+                                                        title={`Delete all attendance for ${student.name} in ${new Date(0, selectedMonth - 1).toLocaleString('default', { month: 'long' })}`}
+                                                        className="text-[11px] bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-800 border border-red-200 px-2 py-0.5 rounded font-medium transition-colors"
+                                                    >
+                                                        Clear Month
+                                                    </button>
+                                                </td>
 
                                             </tr>
 
@@ -914,16 +1003,40 @@ const MonthlyAttendanceEntryTab: React.FC = () => {
         const key = `${studentId}_${dateStr}`;
         const currentStatus = attendanceData[key];
 
-        // STRICT Toggle: Present <-> Absent only (per user request)
+        // Cycle: Present -> Absent -> Clear ('') -> Present
         let newStatus = 'Present';
         if (currentStatus === 'Present') newStatus = 'Absent';
-        else if (currentStatus === 'Absent') newStatus = 'Present';
-        else newStatus = 'Present'; // Fallback for any other status to Present
+        else if (currentStatus === 'Absent') newStatus = '';
+        else newStatus = 'Present';
 
         setAttendanceData(prev => ({
             ...prev,
             [key]: newStatus
         }));
+    };
+
+    const handleClearStudentMonth = async (student: any) => {
+        const monthName = new Date(0, selectedMonth - 1).toLocaleString('default', { month: 'long' });
+        if (!window.confirm(`Are you sure you want to delete ALL attendance records for ${student.name} (${student.admNo || ''}) for ${monthName} ${selectedYear}?\n\nThis will remove their attendance records for this entire month.`)) {
+            return;
+        }
+        setSaving(true);
+        try {
+            const res = await api.delete('/attendance', {
+                data: {
+                    student_id: student.student_id,
+                    month: selectedMonth,
+                    year: selectedYear
+                }
+            });
+            alert(res.data?.message || `Attendance deleted for ${student.name}.`);
+            handleGetStudents();
+        } catch (error: any) {
+            console.error("Failed to clear student month", error);
+            alert(`Failed to delete attendance: ${error.response?.data?.error || error.message}`);
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleReset = () => {
@@ -1157,7 +1270,9 @@ const MonthlyAttendanceEntryTab: React.FC = () => {
                     {students.length > 0 && (
                         <div className="mt-4">
                             <div className="flex justify-between items-center mb-2">
-                                <span className="text-sm text-gray-500">Click on a cell to toggle Present/Absent</span>
+                                <span className="text-sm text-gray-600">
+                                    💡 Click a cell to toggle: <span className="font-semibold text-green-700">Present (P)</span> → <span className="font-semibold text-red-700">Absent (A)</span> → <span className="font-semibold text-gray-500">Clear (-)</span>. Or click <span className="font-semibold text-red-600">Clear Month</span> on any student.
+                                </span>
                                 <div className="flex flex-col items-end gap-1">
                                     <div className="flex gap-2">
                                         <button
@@ -1197,6 +1312,7 @@ const MonthlyAttendanceEntryTab: React.FC = () => {
                                                     </th>
                                                 );
                                             })}
+                                            <th className="px-2 py-1 text-center font-medium text-red-700 bg-red-50 border-l border-red-200">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
@@ -1238,6 +1354,16 @@ const MonthlyAttendanceEntryTab: React.FC = () => {
                                                         </td>
                                                     );
                                                 })}
+                                                <td className="px-2 py-1 text-center border-l border-gray-200">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleClearStudentMonth(student)}
+                                                        className="text-[11px] bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-800 border border-red-200 px-2 py-0.5 rounded font-medium transition-colors whitespace-nowrap"
+                                                        title={`Delete all attendance records for ${student.name} in this month`}
+                                                    >
+                                                        Clear Month
+                                                    </button>
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -1732,6 +1858,760 @@ const AbsentReport: React.FC = () => {
     );
 };
 
+const DeleteAttendanceTab: React.FC = () => {
+    // Mode: 'student' | 'class'
+    const [deleteMode, setDeleteMode] = useState<'student' | 'class'>('student');
+
+    // Class & Section
+    const [classOptions, setClassOptions] = useState<{ id: number; class_name: string }[]>([]);
+    const [selectedClass, setSelectedClass] = useState('');
+    const [sectionOptions, setSectionOptions] = useState<string[]>([]);
+    const [selectedSection, setSelectedSection] = useState('');
+
+    // Students
+    const [students, setStudents] = useState<any[]>([]);
+    const [selectedStudentId, setSelectedStudentId] = useState<number | ''>('');
+    const [studentSearch, setStudentSearch] = useState('');
+
+    // Student Attendance Months
+    const [studentMonths, setStudentMonths] = useState<{
+        month: number;
+        year: number;
+        month_name: string;
+        total: number;
+        present: number;
+        absent: number;
+    }[]>([]);
+    const [selectedMonths, setSelectedMonths] = useState<number[]>([]);
+    const [loadingMonths, setLoadingMonths] = useState(false);
+
+    // Sub-mode for student deletion: 'months' | 'range'
+    const [studentDeleteMode, setStudentDeleteMode] = useState<'months' | 'range'>('months');
+    const [fromDate, setFromDate] = useState('');
+    const [toDate, setToDate] = useState('');
+
+    // Class deletion
+    const [classDeleteType, setClassDeleteType] = useState<'month' | 'date'>('month');
+    const [classMonth, setClassMonth] = useState(new Date().getMonth() + 1);
+    const [classYear, setClassYear] = useState(new Date().getFullYear());
+    const [classDate, setClassDate] = useState(new Date().toISOString().split('T')[0]);
+
+    // Loading & feedback
+    const [loading, setLoading] = useState(false);
+    const [loadingStudents, setLoadingStudents] = useState(false);
+    const [notification, setNotification] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+    // Load classes
+    useEffect(() => {
+        api.get('/classes')
+            .then(res => setClassOptions(filterClassesForUser(res.data.classes || [])))
+            .catch(err => console.error("Failed to load classes", err));
+    }, []);
+
+    // Load sections when class changes
+    useEffect(() => {
+        if (!selectedClass) {
+            setSectionOptions([]);
+            setSelectedSection('');
+            return;
+        }
+
+        const branch = localStorage.getItem('currentBranch') || 'All';
+        const academicYear = localStorage.getItem('academicYear') || '';
+        api.get('/sections', {
+            params: { class: selectedClass, branch, academic_year: academicYear }
+        })
+            .then(res => setSectionOptions(res.data.sections || []))
+            .catch(err => {
+                console.error("Failed to load sections", err);
+                setSectionOptions([]);
+            });
+    }, [selectedClass]);
+
+    // Load students whenever class or section changes
+    useEffect(() => {
+        setSelectedStudentId('');
+        setStudentMonths([]);
+        setSelectedMonths([]);
+        setNotification(null);
+
+        if (selectedClass) {
+            fetchStudents();
+        } else {
+            setStudents([]);
+        }
+    }, [selectedClass, selectedSection]);
+
+    const fetchStudents = async () => {
+        if (!selectedClass) return;
+        setLoadingStudents(true);
+        try {
+            const branch = localStorage.getItem('currentBranch') || 'All';
+            const branchParam = branch === "All Branches" || branch === "All" ? "All" : branch;
+            const academicYear = localStorage.getItem('academicYear') || '';
+            const params: any = { class: selectedClass, branch: branchParam, academic_year: academicYear };
+            if (selectedSection) params.section = selectedSection;
+
+            // 1. Try /attendance endpoint (standard source for attendance students)
+            let fetched: any[] = [];
+            try {
+                const resAtt = await api.get('/attendance', { params });
+                fetched = resAtt.data?.students || [];
+            } catch (attErr) {
+                console.error("Attendance endpoint error", attErr);
+            }
+
+            // 2. If empty, fallback to /students endpoint
+            if (fetched.length === 0) {
+                try {
+                    const resStd = await api.get('/students', { params });
+                    fetched = resStd.data?.students || [];
+                } catch (stdErr) {
+                    console.error("Students endpoint error", stdErr);
+                }
+            }
+
+            setStudents(fetched);
+        } catch (err) {
+            console.error("Failed to load students", err);
+            setStudents([]);
+        } finally {
+            setLoadingStudents(false);
+        }
+    };
+
+    const handleSearchGlobalStudents = async () => {
+        if (!studentSearch.trim()) return;
+        setLoadingStudents(true);
+        try {
+            const branch = localStorage.getItem('currentBranch') || 'All';
+            const branchParam = branch === "All Branches" || branch === "All" ? "All" : branch;
+            const res = await api.get('/students', {
+                params: {
+                    search: studentSearch.trim(),
+                    branch: branchParam
+                }
+            });
+            const list = res.data?.students || [];
+            setStudents(list);
+            if (list.length === 1) {
+                setSelectedStudentId(list[0].student_id);
+            } else if (list.length === 0) {
+                alert(`No students found matching "${studentSearch}".`);
+            }
+        } catch (err) {
+            console.error("Search failed", err);
+        } finally {
+            setLoadingStudents(false);
+        }
+    };
+
+    // Load attendance months when student is selected
+    useEffect(() => {
+        if (!selectedStudentId) {
+            setStudentMonths([]);
+            setSelectedMonths([]);
+            return;
+        }
+        loadStudentMonths(selectedStudentId);
+    }, [selectedStudentId]);
+
+    const loadStudentMonths = async (studentId: number | string) => {
+        setLoadingMonths(true);
+        setSelectedMonths([]);
+        try {
+            const res = await api.get('/attendance/student-months', {
+                params: { student_id: studentId }
+            });
+            setStudentMonths(res.data || []);
+        } catch (err: any) {
+            console.error("Failed to fetch student attendance months", err);
+            setStudentMonths([]);
+        } finally {
+            setLoadingMonths(false);
+        }
+    };
+
+    const selectedStudent = students.find(s => s.student_id === Number(selectedStudentId));
+
+    // Shortcut: Select June, July, August (Months 6, 7, 8)
+    const selectJuneJulyAugust = () => {
+        const jja = [6, 7, 8];
+        const match = studentMonths.filter(m => jja.includes(m.month)).map(m => m.month);
+        setSelectedMonths(match);
+        if (match.length === 0) {
+            alert("No attendance records found for June, July, or August for this student.");
+        }
+    };
+
+    const toggleMonthSelection = (m: number) => {
+        setSelectedMonths(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
+    };
+
+    const selectAllMonths = () => {
+        setSelectedMonths(studentMonths.map(m => m.month));
+    };
+
+    const deselectAllMonths = () => {
+        setSelectedMonths([]);
+    };
+
+    // Delete student selected months
+    const handleDeleteStudentMonths = async () => {
+        if (!selectedStudentId || selectedMonths.length === 0) {
+            alert("Please select at least one month to delete.");
+            return;
+        }
+
+        const monthNames = selectedMonths
+            .map(m => studentMonths.find(sm => sm.month === m)?.month_name || `Month ${m}`)
+            .join(', ');
+
+        const targetYear = studentMonths.find(sm => selectedMonths.includes(sm.month))?.year || new Date().getFullYear();
+
+        const msg = `⚠️ PERMANENT ATTENDANCE DELETION\n\nStudent: ${selectedStudent?.name || `ID ${selectedStudentId}`} (${selectedStudent?.admNo || ''})\nMonths to Delete: ${monthNames}\nYear: ${targetYear}\n\nAre you sure you want to permanently delete all attendance records for these months?`;
+        if (!window.confirm(msg)) return;
+
+        setLoading(true);
+        setNotification(null);
+        try {
+            const res = await api.delete('/attendance', {
+                data: {
+                    student_id: selectedStudentId,
+                    months: selectedMonths,
+                    year: targetYear
+                }
+            });
+            setNotification({
+                type: 'success',
+                text: res.data?.message || `Successfully deleted attendance for ${monthNames}.`
+            });
+            loadStudentMonths(selectedStudentId);
+        } catch (err: any) {
+            console.error("Failed to delete attendance months", err);
+            setNotification({
+                type: 'error',
+                text: `Delete failed: ${err.response?.data?.error || err.message}`
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Delete student date range
+    const handleDeleteDateRange = async () => {
+        if (!selectedStudentId) {
+            alert("Please select a student.");
+            return;
+        }
+        if (!fromDate || !toDate) {
+            alert("Please select both From Date and To Date.");
+            return;
+        }
+        if (fromDate > toDate) {
+            alert("From Date cannot be later than To Date.");
+            return;
+        }
+
+        const msg = `⚠️ PERMANENT ATTENDANCE DELETION\n\nStudent: ${selectedStudent?.name || `ID ${selectedStudentId}`}\nDate Range: ${fromDate} to ${toDate}\n\nAre you sure you want to permanently delete all attendance records in this range?`;
+        if (!window.confirm(msg)) return;
+
+        setLoading(true);
+        setNotification(null);
+        try {
+            const res = await api.delete('/attendance', {
+                data: {
+                    student_id: selectedStudentId,
+                    from_date: fromDate,
+                    to_date: toDate
+                }
+            });
+            setNotification({
+                type: 'success',
+                text: res.data?.message || `Successfully deleted attendance from ${fromDate} to ${toDate}.`
+            });
+            loadStudentMonths(selectedStudentId);
+        } catch (err: any) {
+            console.error("Failed to delete date range", err);
+            setNotification({
+                type: 'error',
+                text: `Delete failed: ${err.response?.data?.error || err.message}`
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Delete entire class attendance
+    const handleDeleteClassAttendance = async () => {
+        if (!selectedClass) {
+            alert("Please select a class.");
+            return;
+        }
+
+        if (classDeleteType === 'date') {
+            if (!classDate) return alert("Please select a date.");
+            const msg = `⚠️ PERMANENT ATTENDANCE DELETION\n\nClass: ${selectedClass}${selectedSection ? ` (${selectedSection})` : ''}\nDate: ${classDate}\n\nAre you sure you want to permanently delete attendance for ALL students in this class on ${classDate}?`;
+            if (!window.confirm(msg)) return;
+
+            setLoading(true);
+            setNotification(null);
+            try {
+                const res = await api.delete('/attendance', {
+                    data: {
+                        class: selectedClass,
+                        section: selectedSection,
+                        date: classDate
+                    }
+                });
+                setNotification({
+                    type: 'success',
+                    text: res.data?.message || `Successfully deleted class attendance for ${classDate}.`
+                });
+            } catch (err: any) {
+                console.error("Failed to delete class attendance", err);
+                setNotification({
+                    type: 'error',
+                    text: `Delete failed: ${err.response?.data?.error || err.message}`
+                });
+            } finally {
+                setLoading(false);
+            }
+        } else {
+            const monthName = new Date(0, classMonth - 1).toLocaleString('default', { month: 'long' });
+            const msg = `⚠️ PERMANENT ATTENDANCE DELETION\n\nClass: ${selectedClass}${selectedSection ? ` (${selectedSection})` : ''}\nMonth: ${monthName} ${classYear}\n\nAre you sure you want to permanently delete attendance for ALL students in this class for the entire month of ${monthName} ${classYear}?`;
+            if (!window.confirm(msg)) return;
+
+            setLoading(true);
+            setNotification(null);
+            try {
+                const res = await api.delete('/attendance', {
+                    data: {
+                        class: selectedClass,
+                        section: selectedSection,
+                        month: classMonth,
+                        year: classYear
+                    }
+                });
+                setNotification({
+                    type: 'success',
+                    text: res.data?.message || `Successfully deleted class attendance for ${monthName} ${classYear}.`
+                });
+            } catch (err: any) {
+                console.error("Failed to delete class month attendance", err);
+                setNotification({
+                    type: 'error',
+                    text: `Delete failed: ${err.response?.data?.error || err.message}`
+                });
+            } finally {
+                setLoading(false);
+            }
+        }
+    };
+
+    const filteredStudents = students.filter(s => {
+        if (!studentSearch.trim()) return true;
+        const q = studentSearch.toLowerCase();
+        return (
+            (s.name && s.name.toLowerCase().includes(q)) ||
+            (s.admNo && String(s.admNo).toLowerCase().includes(q)) ||
+            (s.rollNo && String(s.rollNo).toLowerCase().includes(q))
+        );
+    });
+
+    return (
+        <div className="p-4 max-w-5xl mx-auto">
+            <div className="bg-white rounded-lg shadow-md border border-red-200 overflow-hidden">
+                <div className="bg-red-600 text-white font-semibold p-4 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xl">🗑️</span>
+                        <div>
+                            <h3 className="text-base font-bold">DELETE ATTENDANCE</h3>
+                            <p className="text-xs text-red-100 font-normal">Remove mistaken or unjoined attendance records (e.g. for students who joined in September)</p>
+                        </div>
+                    </div>
+                    <div className="flex bg-red-700/80 p-1 rounded-md text-xs">
+                        <button
+                            type="button"
+                            onClick={() => { setDeleteMode('student'); setNotification(null); }}
+                            className={`px-3 py-1.5 rounded font-medium transition-colors ${deleteMode === 'student' ? 'bg-white text-red-700 shadow-sm' : 'text-white hover:bg-red-600'}`}
+                        >
+                            Delete by Student
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setDeleteMode('class'); setNotification(null); }}
+                            className={`px-3 py-1.5 rounded font-medium transition-colors ${deleteMode === 'class' ? 'bg-white text-red-700 shadow-sm' : 'text-white hover:bg-red-600'}`}
+                        >
+                            Delete by Entire Class
+                        </button>
+                    </div>
+                </div>
+
+                {notification && (
+                    <div className={`p-3 text-sm flex items-center justify-between ${notification.type === 'success' ? 'bg-green-50 text-green-800 border-b border-green-200' : 'bg-red-50 text-red-800 border-b border-red-200'}`}>
+                        <span>{notification.text}</span>
+                        <button onClick={() => setNotification(null)} className="text-xs font-bold px-2 py-0.5 rounded hover:bg-black/5">✕</button>
+                    </div>
+                )}
+
+                <div className="p-5 space-y-5">
+                    {/* Filter Bar */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Class *</label>
+                            <select
+                                value={selectedClass}
+                                onChange={e => setSelectedClass(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-red-500"
+                            >
+                                <option value="">-- Select Class --</option>
+                                {classOptions.map(c => <option key={c.id} value={c.class_name}>{c.class_name}</option>)}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Section</label>
+                            <select
+                                value={selectedSection}
+                                onChange={e => setSelectedSection(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-red-500"
+                            >
+                                <option value="">-- All Sections --</option>
+                                {sectionOptions.map(sec => <option key={sec} value={sec}>{sec}</option>)}
+                            </select>
+                        </div>
+
+                        {deleteMode === 'student' && (
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                                    Select Student * {students.length > 0 && <span className="text-gray-500 font-normal">({students.length} found)</span>}
+                                </label>
+                                <select
+                                    value={selectedStudentId}
+                                    onChange={e => setSelectedStudentId(e.target.value ? Number(e.target.value) : '')}
+                                    disabled={!selectedClass || loadingStudents}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-red-500 disabled:bg-gray-100"
+                                >
+                                    <option value="">
+                                        {loadingStudents
+                                            ? '-- Loading students... --'
+                                            : !selectedClass
+                                                ? '-- First Select Class --'
+                                                : students.length === 0
+                                                    ? '-- No Students Found in this Class/Section --'
+                                                    : '-- Select Student --'}
+                                    </option>
+                                    {students.map(s => {
+                                        const adm = s.admNo || s.admission_no || '';
+                                        const roll = s.rollNo || s.Roll_Number || '';
+                                        return (
+                                            <option key={s.student_id} value={s.student_id}>
+                                                {s.name} {adm ? `(Adm: ${adm})` : ''} {roll ? `[Roll: ${roll}]` : ''}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Quick Search Student by Name / Adm No */}
+                    {deleteMode === 'student' && (
+                        <div className="flex flex-wrap items-center gap-2 bg-gray-50 p-2.5 rounded-md border border-gray-200">
+                            <span className="text-xs font-semibold text-gray-600 whitespace-nowrap">🔍 Quick Search Any Student:</span>
+                            <input
+                                type="text"
+                                placeholder="Type Student Name or Admission Number..."
+                                value={studentSearch}
+                                onChange={e => setStudentSearch(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') handleSearchGlobalStudents();
+                                }}
+                                className="flex-1 min-w-[200px] px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-red-500"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleSearchGlobalStudents}
+                                disabled={loadingStudents}
+                                className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded text-xs font-semibold shadow-sm transition-colors whitespace-nowrap disabled:bg-gray-400"
+                            >
+                                {loadingStudents ? 'Searching...' : 'Search'}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* STUDENT DELETION VIEW */}
+                    {deleteMode === 'student' && selectedStudent && (
+                        <div className="border border-red-200 rounded-lg p-4 bg-red-50/30 space-y-4">
+                            {/* Student Profile Card */}
+                            <div className="bg-white p-3 rounded-md border border-gray-200 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+                                <div>
+                                    <span className="text-base font-bold text-gray-900">{selectedStudent.name}</span>
+                                    <div className="text-xs text-gray-500 flex flex-wrap gap-4 mt-0.5">
+                                        <span>Admission No: <strong className="text-gray-700">{selectedStudent.admNo || selectedStudent.admission_no || '-'}</strong></span>
+                                        <span>Roll No: <strong className="text-gray-700">{selectedStudent.rollNo || selectedStudent.Roll_Number || '-'}</strong></span>
+                                        <span>Father: <strong className="text-gray-700">{selectedStudent.father || selectedStudent.Fatherfirstname || '-'}</strong></span>
+                                        <span>Class: <strong className="text-gray-700">{selectedStudent.class || selectedClass} {selectedStudent.section || selectedSection ? `(${selectedStudent.section || selectedSection})` : ''}</strong></span>
+                                    </div>
+                                </div>
+                                <div className="flex bg-gray-100 p-1 rounded-md text-xs">
+                                    <button
+                                        type="button"
+                                        onClick={() => setStudentDeleteMode('months')}
+                                        className={`px-3 py-1 rounded font-medium ${studentDeleteMode === 'months' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                                    >
+                                        Delete by Month(s)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setStudentDeleteMode('range')}
+                                        className={`px-3 py-1 rounded font-medium ${studentDeleteMode === 'range' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                                    >
+                                        Delete by Date Range
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Sub Mode 1: By Month(s) */}
+                            {studentDeleteMode === 'months' && (
+                                <div className="space-y-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="text-sm font-semibold text-gray-800">
+                                            Recorded Attendance Months for this Academic Year:
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={selectJuneJulyAugust}
+                                                className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 font-semibold px-2.5 py-1 rounded border border-amber-300 transition-colors shadow-sm"
+                                                title="Select June, July, and August"
+                                            >
+                                                ⚡ Select June, July, August
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={selectAllMonths}
+                                                className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-300"
+                                            >
+                                                Select All
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={deselectAllMonths}
+                                                className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-300"
+                                            >
+                                                Deselect All
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {loadingMonths ? (
+                                        <div className="p-8 text-center text-gray-500">Loading attendance records...</div>
+                                    ) : studentMonths.length === 0 ? (
+                                        <div className="p-6 text-center bg-white border rounded-lg text-gray-500 text-sm">
+                                            No attendance records found for this student in this academic year.
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                            {studentMonths.map(m => {
+                                                const isSelected = selectedMonths.includes(m.month);
+                                                return (
+                                                    <div
+                                                        key={`${m.year}-${m.month}`}
+                                                        onClick={() => toggleMonthSelection(m.month)}
+                                                        className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${isSelected ? 'border-red-500 bg-red-50/80 shadow-sm' : 'border-gray-200 bg-white hover:border-red-200'}`}
+                                                    >
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <span className="font-bold text-gray-900 text-sm">{m.month_name} {m.year}</span>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={isSelected}
+                                                                onChange={() => { }} // Handled by card click
+                                                                className="h-4 w-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
+                                                            />
+                                                        </div>
+                                                        <div className="text-xs text-gray-600 flex justify-between mt-2 pt-2 border-t border-gray-100">
+                                                            <span>Total: <strong className="text-gray-900">{m.total}</strong></span>
+                                                            <span className="text-green-700">P: {m.present}</span>
+                                                            <span className="text-red-700">A: {m.absent}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {studentMonths.length > 0 && (
+                                        <div className="pt-3 border-t border-gray-200 flex items-center justify-between">
+                                            <span className="text-xs text-gray-600">
+                                                Selected: <strong>{selectedMonths.length}</strong> month(s)
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={handleDeleteStudentMonths}
+                                                disabled={loading || selectedMonths.length === 0}
+                                                className="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-md text-sm disabled:bg-gray-300 disabled:cursor-not-allowed shadow transition-colors flex items-center gap-2"
+                                            >
+                                                <span>🗑️</span>
+                                                <span>{loading ? "Deleting..." : `Delete Attendance for ${selectedMonths.length} Selected Month(s)`}</span>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Sub Mode 2: By Date Range */}
+                            {studentDeleteMode === 'range' && (
+                                <div className="space-y-4 bg-white p-4 rounded-lg border border-gray-200">
+                                    <div className="text-sm font-semibold text-gray-800">
+                                        Delete attendance within a specific date range:
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-700 mb-1">From Date *</label>
+                                            <input
+                                                type="date"
+                                                value={fromDate}
+                                                onChange={e => setFromDate(e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-red-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-700 mb-1">To Date *</label>
+                                            <input
+                                                type="date"
+                                                value={toDate}
+                                                onChange={e => setToDate(e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-red-500"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+                                        <div className="flex gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const curYear = new Date().getFullYear();
+                                                    setFromDate(`${curYear}-06-01`);
+                                                    setToDate(`${curYear}-08-31`);
+                                                }}
+                                                className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1.5 rounded font-medium"
+                                            >
+                                                ⚡ Quick Preset: June 1 – August 31
+                                            </button>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleDeleteDateRange}
+                                            disabled={loading || !fromDate || !toDate}
+                                            className="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-md text-sm disabled:bg-gray-300 disabled:cursor-not-allowed shadow transition-colors flex items-center gap-2"
+                                        >
+                                            <span>🗑️</span>
+                                            <span>{loading ? "Deleting..." : "Delete Date Range Attendance"}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* CLASS LEVEL DELETION VIEW */}
+                    {deleteMode === 'class' && (
+                        <div className="border border-red-200 rounded-lg p-4 bg-red-50/30 space-y-4">
+                            <div className="bg-white p-3 rounded-md border border-gray-200 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+                                <div>
+                                    <span className="text-base font-bold text-gray-900">Entire Class Attendance Deletion</span>
+                                    <p className="text-xs text-gray-500 mt-0.5">Delete attendance for all students in {selectedClass ? `Class ${selectedClass}` : 'the selected class'}.</p>
+                                </div>
+                                <div className="flex bg-gray-100 p-1 rounded-md text-xs">
+                                    <button
+                                        type="button"
+                                        onClick={() => setClassDeleteType('month')}
+                                        className={`px-3 py-1 rounded font-medium ${classDeleteType === 'month' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                                    >
+                                        Entire Month
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setClassDeleteType('date')}
+                                        className={`px-3 py-1 rounded font-medium ${classDeleteType === 'date' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                                    >
+                                        Specific Date
+                                    </button>
+                                </div>
+                            </div>
+
+                            {classDeleteType === 'month' ? (
+                                <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-700 mb-1">Month *</label>
+                                            <select
+                                                value={classMonth}
+                                                onChange={e => setClassMonth(parseInt(e.target.value))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-red-500"
+                                            >
+                                                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                                                    <option key={m} value={m}>{new Date(0, m - 1).toLocaleString('default', { month: 'long' })}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-700 mb-1">Year *</label>
+                                            <input
+                                                type="number"
+                                                value={classYear}
+                                                onChange={e => setClassYear(parseInt(e.target.value))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-red-500"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleDeleteClassAttendance}
+                                            disabled={loading || !selectedClass}
+                                            className="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-md text-sm disabled:bg-gray-300 disabled:cursor-not-allowed shadow transition-colors flex items-center gap-2"
+                                        >
+                                            <span>🗑️</span>
+                                            <span>{loading ? "Deleting..." : `Delete Entire Class Attendance for ${new Date(0, classMonth - 1).toLocaleString('default', { month: 'long' })} ${classYear}`}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-700 mb-1">Date *</label>
+                                        <input
+                                            type="date"
+                                            value={classDate}
+                                            onChange={e => setClassDate(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-red-500"
+                                        />
+                                    </div>
+                                    <div className="flex justify-end pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleDeleteClassAttendance}
+                                            disabled={loading || !selectedClass || !classDate}
+                                            className="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-md text-sm disabled:bg-gray-300 disabled:cursor-not-allowed shadow transition-colors flex items-center gap-2"
+                                        >
+                                            <span>🗑️</span>
+                                            <span>{loading ? "Deleting..." : `Delete Entire Class Attendance for ${classDate}`}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const StudentAttendance: React.FC<StudentAttendanceProps> = ({ defaultTab = 'take' }) => {
     const [activeTab, setActiveTab] = useState<AttendanceTab>(defaultTab);
 
@@ -1750,6 +2630,8 @@ const StudentAttendance: React.FC<StudentAttendanceProps> = ({ defaultTab = 'tak
                 return <TakeAttendanceForm />;
             case 'register':
                 return <RegisterView />;
+            case 'delete':
+                return <DeleteAttendanceTab />;
             case 'absent-report' as any:
                 return <AbsentReport />;
             case 'today':
