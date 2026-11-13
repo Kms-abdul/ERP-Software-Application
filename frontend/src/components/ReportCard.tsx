@@ -372,45 +372,43 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
               <span>STUDENT PERFORMANCE</span>
               <span dir="rtl" className="font-arabic">طلبہ کا مظاہرہ</span>
             </div>
-            <div className="p-4 flex-1 flex items-center justify-between min-h-[240px] gap-2">
-              <div className="flex flex-col justify-center space-y-2.5 flex-1 min-w-0">
-                {data.academicPerformance
-                  .filter(ap => ap.subject && ap.subject !== '')
-                  .map((ap, idx) => (
-                    <div key={idx} className="flex items-center space-x-2 text-xs md:text-sm font-semibold text-gray-800">
-                      <div className="w-3.5 h-3.5 rounded-sm flex-shrink-0" style={{ backgroundColor: ap.color || '#f8f8f8ff' }}></div>
-                      <span className="truncate">{ap.subject}: {ap.percentage || 0}%</span>
-                    </div>
-                  ))
-                }
-              </div>
-              <div className="flex items-center justify-center flex-shrink-0" style={{ width: '240px', height: '240px' }}>
+            <div className="p-3 flex-1 flex flex-col items-center justify-between min-h-[250px]">
+              <div className="flex items-center justify-center w-full flex-1 min-h-[180px]">
                 {academicPieData.length > 0 ? (
-                  <ResponsiveContainer width={240} height={240}>
-                    <PieChart>
-                      <Pie
-                        data={academicPieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={30}
-                        outerRadius={95}
-                        paddingAngle={0}
-                        startAngle={90}
-                        endAngle={-270}
-                        dataKey="value"
-                      >
-                        {academicPieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <PieChart width={240} height={180}>
+                    <Pie
+                      data={academicPieData}
+                      cx={120}
+                      cy={90}
+                      innerRadius={30}
+                      outerRadius={85}
+                      paddingAngle={0}
+                      startAngle={90}
+                      endAngle={-270}
+                      dataKey="value"
+                    >
+                      {academicPieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
                 ) : (
                   <div className="flex items-center justify-center h-full text-gray-400 text-sm">
                     No academic data
                   </div>
                 )}
+              </div>
+              <div className="w-full pt-2.5 mt-1 border-t border-gray-200 flex flex-wrap justify-center items-center gap-x-4 gap-y-1.5">
+                {data.academicPerformance
+                  .filter(ap => ap.subject && ap.subject !== '')
+                  .map((ap, idx) => (
+                    <div key={idx} className="flex items-center space-x-1.5 text-xs md:text-sm font-semibold text-gray-800">
+                      <div className="w-3.5 h-3.5 rounded-sm flex-shrink-0" style={{ backgroundColor: ap.color || '#f8f8f8ff' }}></div>
+                      <span className="whitespace-nowrap">{ap.subject}: {ap.percentage || 0}%</span>
+                    </div>
+                  ))
+                }
               </div>
             </div>
           </div>
