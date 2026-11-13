@@ -578,6 +578,85 @@ def delete_attendance(current_user):
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
+
+@bp.route("/api/attendance/cleanup-holidays", methods=["POST"])
+@token_required
+def cleanup_holiday_attendance(current_user):
+    """
+    Deletes any attendance records that exist on dates that are currently declared as holidays or weekly offs.
+    Accepts: { class, section, month, year, branch }
+    """
+    try:
+        from routes.config_routes import is_weekoff_or_holiday
+        h_year = request.headers.get("X-Academic-Year")
+        data = request.get_json(silent=True) or {}
+        class_name = data.get("class")
+        section = data.get("section")
+        month = data.get("month")
+        year = data.get("year")
+        h_branch = data.get("branch") or request.headers.get("X-Branch")
+
+        branch_id = None
+        if h_branch and h_branch not in ("All", "All Branches"):
+            b_obj = Branch.query.filter(or_(Branch.branch_code == h_branch, Branch.branch_name == h_branch)).first()
+            if b_obj:
+                branch_id = b_obj.id
+
+        class_id = None
+        if class_name:
+            cls = ClassMaster.query.filter_by(class_name=class_name).first()
+            if cls:
+                class_id = cls.id
+
+        q = Attendance.query
+        if h_year:
+            q = q.filter(Attendance.academic_year == h_year)
+        if month:
+            q = q.filter(db.extract('month', Attendance.date) == int(month))
+        if year:
+            q = q.filter(db.extract('year', Attendance.date) == int(year))
+
+        if class_name:
+            sq = db.session.query(Student.student_id).join(
+                StudentAcademicRecord,
+                Student.student_id == StudentAcademicRecord.student_id
+            ).filter(
+                StudentAcademicRecord.class_name == class_name
+            )
+            if h_year:
+                sq = sq.filter(StudentAcademicRecord.academic_year == h_year)
+            if section:
+                sq = sq.filter(StudentAcademicRecord.section == section)
+            s_ids = [r[0] for r in sq.all()]
+            if s_ids:
+                q = q.filter(Attendance.student_id.in_(s_ids))
+            else:
+                return jsonify({"message": "No students found for this class/section.", "deleted_count": 0, "dates": []}), 200
+
+        records = q.all()
+        deleted_count = 0
+        deleted_dates = set()
+
+        for rec in records:
+            res = is_weekoff_or_holiday(rec.date, branch_id, h_year, class_id=class_id)
+            if res.get("is_weekoff") or res.get("is_holiday"):
+                deleted_dates.add(rec.date.isoformat())
+                db.session.delete(rec)
+                deleted_count += 1
+
+        db.session.commit()
+        return jsonify({
+            "message": f"Cleaned up {deleted_count} attendance records from holiday/weekoff dates ({', '.join(sorted(deleted_dates)) or 'None'}).",
+            "deleted_count": deleted_count,
+            "dates": sorted(list(deleted_dates))
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 @bp.route("/api/attendance/template", methods=["GET"])
 @token_required
 def generate_template(current_user):
