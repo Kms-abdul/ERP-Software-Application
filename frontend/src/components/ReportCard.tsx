@@ -489,19 +489,25 @@ const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
                       <tr>
                         <td className="border border-indigo-200 p-2 font-bold bg-gray-50 uppercase text-gray-800 text-center">Total</td>
                         {data.attendance.monthly.map((m, i) => (
-                          <td key={i} className="border border-indigo-200 p-2 text-center font-bold text-gray-900">{m.total || 0}</td>
+                          <td key={i} className={`border border-indigo-200 p-2 text-center font-bold ${m.total === '-' ? 'text-gray-400 font-semibold' : 'text-gray-900'}`}>
+                            {m.total ?? '-'}
+                          </td>
                         ))}
                       </tr>
                       <tr>
                         <td className="border border-indigo-200 p-2 font-bold bg-gray-50 uppercase text-gray-800 text-center">Present</td>
                         {data.attendance.monthly.map((m, i) => (
-                          <td key={i} className="border border-indigo-200 p-2 text-center font-bold text-green-700 bg-green-50/40">{m.present || 0}</td>
+                          <td key={i} className={`border border-indigo-200 p-2 text-center font-bold ${m.present === '-' ? 'text-gray-400 font-semibold' : 'text-green-700 bg-green-50/40'}`}>
+                            {m.present ?? '-'}
+                          </td>
                         ))}
                       </tr>
                       <tr>
                         <td className="border border-indigo-200 p-2 font-bold bg-gray-50 uppercase text-gray-800 text-center">Absent</td>
                         {data.attendance.monthly.map((m, i) => (
-                          <td key={i} className="border border-indigo-200 p-2 text-center font-bold text-red-700 bg-red-50/40">{m.absent || 0}</td>
+                          <td key={i} className={`border border-indigo-200 p-2 text-center font-bold ${m.absent === '-' ? 'text-gray-400 font-semibold' : 'text-red-700 bg-red-50/40'}`}>
+                            {m.absent ?? '-'}
+                          </td>
                         ))}
                       </tr>
                     </tbody>
