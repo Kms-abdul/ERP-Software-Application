@@ -10,6 +10,16 @@ import traceback
 
 bp = Blueprint('fee_transaction_routes', __name__)
 
+
+def _format_installment_title(value):
+    title = str(value or "").strip()
+    while title.lower().endswith(" fee fee"):
+        title = title[:-4].rstrip()
+    if title.lower().endswith(" fee") or not title:
+        return title
+    return f"{title} Fee"
+
+
 def is_backdated_fee_payment_allowed():
     """
     Returns True if backdated fee payments are allowed.
@@ -181,7 +191,7 @@ def get_student_fees_detail(current_user, student_id):
             if sf.month == "One-Time" or (sf.fee_type and sf.fee_type.type != "Installment"):
                 title = sf.fee_type.feetype if sf.fee_type else "Special Fee"
             else:
-                title = f"{sf.month} Fee"
+                title = _format_installment_title(sf.month)
                 
             norm_title = normalize_fee_title(title)
             
@@ -199,7 +209,7 @@ def get_student_fees_detail(current_user, student_id):
             if sf.month == "One-Time" or (sf.fee_type and sf.fee_type.type != "Installment"):
                 title = sf.fee_type.feetype if sf.fee_type else "Special Fee"
             else:
-                title = f"{sf.month} Fee"
+                title = _format_installment_title(sf.month)
             
             payable = float(sf.total_fee or 0)
             paid_amt = float(sf.paid_amount or 0)
