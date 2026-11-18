@@ -34,6 +34,7 @@ import FundAllocation from './FundAllocation';
 import MonthWiseLedger from './MonthWiseLedger';
 import RemittanceDeposit from './RemittanceDeposit';
 import RemittanceApprovals from './RemittanceApprovals';
+import HifzRewards from "./HifzRewards";
 import ReconciliationDashboard from './ReconciliationDashboard';
 import FeeDueReports from './FeeDueReports';
 import FinancialLayout from './FinancialLayout';
@@ -71,7 +72,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const isTeacher = user?.role === 'Teacher';
   const teacherAllowedPages = [
     'dashboard', 'profile', 'staff-support', 'administration',
-    'student-attendance', 'attendance-report', 'student-administration', 'document-management'
+    'student-attendance', 'attendance-report', 'student-administration', 'document-management',
+    'hifz-rewards'
   ];
 
   return (
@@ -126,6 +128,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                   {currentPage === 'administration' && <Administration navigateTo={navigateTo} />}
                   {currentPage === 'academic' && <AcademicManagement navigateTo={navigateTo} />}
                   {currentPage === 'academics' && <Academics />}
+                  {currentPage === "hifz-rewards" && <HifzRewards />}
                   {currentPage === 'setup' && <SetupSchool navigateTo={navigateTo} />}
                   {currentPage === 'classes-management' && <ClassesManagement navigateTo={navigateTo} />}
                   {currentPage === 'student-attendance' && <StudentAttendance navigateTo={navigateTo} />}

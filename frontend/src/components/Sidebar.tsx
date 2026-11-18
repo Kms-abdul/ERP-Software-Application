@@ -16,6 +16,7 @@ interface SidebarProps {
 // FIX: Explicitly type `navCategories` to ensure `cat.page` is of type `Page`.
 const navCategories: { title: string; icon: React.ReactNode; page: Page }[] = [
   { title: 'Dashboard', icon: <DashboardIcon className="w-5 h-5" />, page: 'dashboard' },
+  { title: 'Hifz Rewards', icon: <AcademicIcon className="w-5 h-5" />, page: 'hifz-rewards' },
   { title: 'Academic', icon: <AcademicIcon className="w-5 h-5" />, page: 'academic' },
   { title: 'Financial', icon: <FinancialIcon className="w-5 h-5" />, page: 'fee' },
   { title: 'Administration', icon: <AdministrationIcon className="w-5 h-5" />, page: 'administration' },
@@ -28,9 +29,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar, navigateTo, cu
 
   const visibleCategories = navCategories.filter((cat) => {
     if (isTeacher) {
-      return cat.page === 'administration' || cat.page === 'dashboard';
+      return cat.page === 'administration' ||
+        cat.page === 'dashboard' ||
+        cat.page === 'hifz-rewards';
     }
-    return true;
+    return cat.page !== 'hifz-rewards';
   });
 
   return (

@@ -15,6 +15,7 @@ export type Page =
   | "administration"
   | "academic"
   | "academics"
+  | "hifz-rewards"
   | "setup"
   | "classes-management"
   | "student-attendance"

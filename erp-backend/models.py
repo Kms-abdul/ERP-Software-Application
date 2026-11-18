@@ -1041,6 +1041,76 @@ class RemittanceReceipt(db.Model, AuditMixin):
 
     fee_payment = db.relationship("FeePayment")
 
+# -------------------------------------------------------
+# Hifz Reward Prize Model
+# -------------------------------------------------------
+
+class HifzReward(db.Model, AuditMixin):
+    __tablename__ = "hifzrewards_master"
+    __audit_module__ = "ACADEMICS"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+
+    para_number = db.Column(db.Integer, nullable=False, index=True)
+    days_limit = db.Column(db.Integer, nullable=False)
+
+    excellent_amount = db.Column(db.Numeric(10, 2), nullable=False)
+    very_good_amount = db.Column(db.Numeric(10, 2), nullable=False)
+    good_amount = db.Column(db.Numeric(10, 2), nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "para_number",
+            "days_limit",
+            name="uq_hifz_reward_para_days_limit"
+        ),
+    )
+
+
+class StudentHifzReward(db.Model, AuditMixin):
+    __tablename__ = "student_hifz_rewards"
+    __audit_module__ = "ACADEMICS"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+
+    student_id = db.Column(
+        db.Integer,
+        db.ForeignKey("students.student_id"),
+        nullable=False
+    )
+    reward_rule_id = db.Column(
+        db.Integer,
+        db.ForeignKey("hifzrewards_master.id"),
+        nullable=False
+    )
+
+    para_number = db.Column(db.Integer, nullable=False)
+    no_of_days = db.Column(db.Integer, nullable=False)
+
+    performance_type = db.Column(
+        db.Enum("Excellent", "Very Good", "Good"),
+        nullable=False
+    )
+
+    # Saved at the time of entry, so old rewards do not change
+    # when Settings changes later.
+    days_limit_snapshot = db.Column(db.Integer, nullable=False)
+    is_eligible = db.Column(db.Boolean, nullable=False, default=False)
+    reward_amount = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+
+    completed_date = db.Column(db.Date, nullable=False, default=date.today)
+
+    student = db.relationship("Student")
+    reward_rule = db.relationship("HifzReward")
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "student_id",
+            "para_number",
+            name="uq_student_hifz_reward_para"
+        ),
+    )
+
 
 # ----------------------------------------------------------
 # GLOBAL AUDIT EVENT LISTENERS
