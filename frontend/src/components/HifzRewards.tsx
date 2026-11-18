@@ -20,11 +20,6 @@ interface RewardRuleForm {
   good_amount: string;
 }
 
-interface BranchOption {
-  branch_code: string;
-  branch_name: string;
-}
-
 interface ClassOption {
   id: number;
   class_name: string;
@@ -104,9 +99,13 @@ const HifzRewards: React.FC = () => {
   const [activeTab, setActiveTab] = useState<HifzRewardsTab>("dashboard");
   const user = getStoredUser();
   const isTeacher = user.role === "Teacher";
-  const canSelectAllBranches =
-    user.role === "Director" ||
-    ["All", "AllBranches", "All Branches"].includes(user.branch);
+  const [selectedBranch] = useState(
+    () => localStorage.getItem("currentBranch") || user.branch || "All"
+  );
+  const isAllBranch = ["all", "all branches", "allbranches"].includes(
+    selectedBranch.toLowerCase()
+  );
+  const branchDisplayName = isAllBranch ? "All Branches" : selectedBranch;
 
   const [rules, setRules] = useState<RewardRule[]>([]);
   const [form, setForm] = useState<RewardRuleForm>(emptyRule);
@@ -114,8 +113,6 @@ const HifzRewards: React.FC = () => {
   const [message, setMessage] = useState("");
   const [loadingRules, setLoadingRules] = useState(true);
 
-  const [branches, setBranches] = useState<BranchOption[]>([]);
-  const [selectedBranch, setSelectedBranch] = useState("");
   const [classes, setClasses] = useState<ClassOption[]>([]);
   const [selectedClass, setSelectedClass] = useState("");
   const [sections, setSections] = useState<string[]>([]);
@@ -136,11 +133,6 @@ const HifzRewards: React.FC = () => {
   const [reportMessage, setReportMessage] = useState("");
   const studentRequestId = useRef(0);
 
-  const selectedBranchOption = branches.find(
-    (branch) => (branch.branch_code || branch.branch_name) === selectedBranch
-  );
-  const selectedBranchName = selectedBranchOption?.branch_name || "";
-
   const loadRules = async () => {
     try {
       setLoadingRules(true);
@@ -153,33 +145,8 @@ const HifzRewards: React.FC = () => {
     }
   };
 
-  const loadBranches = async () => {
-    try {
-      const response = await api.get("/branches");
-      const availableBranches: BranchOption[] = response.data.branches || [];
-      setBranches(availableBranches);
-
-      const storedBranch = localStorage.getItem("currentBranch") || user.branch || "";
-      const matchingBranch = availableBranches.find(
-        (branch) =>
-          branch.branch_code === storedBranch || branch.branch_name === storedBranch
-      );
-      if (matchingBranch) {
-        setSelectedBranch(matchingBranch.branch_code || matchingBranch.branch_name);
-      } else if (availableBranches.length > 0) {
-        setSelectedBranch(
-          availableBranches[0].branch_code || availableBranches[0].branch_name
-        );
-      } else if (canSelectAllBranches) {
-        setSelectedBranch("All");
-      }
-    } catch (error: any) {
-      setEntryMessage(error.response?.data?.message || "Unable to load branches.");
-    }
-  };
-
   const loadStudentRewards = async () => {
-    if (!selectedBranch && !canSelectAllBranches) {
+    if (!selectedBranch) {
       setLoadingReport(false);
       return;
     }
@@ -188,9 +155,8 @@ const HifzRewards: React.FC = () => {
       setLoadingReport(true);
       setReportMessage("");
       const params: Record<string, string> = {};
-      if (selectedBranch && selectedBranch !== "All") {
+      if (!isAllBranch) {
         params.branch = selectedBranch;
-        if (selectedBranchName) params.branch_name = selectedBranchName;
       }
       if (selectedClass) params.class_name = selectedClass;
       if (selectedSection) params.section = selectedSection;
@@ -208,11 +174,10 @@ const HifzRewards: React.FC = () => {
 
   useEffect(() => {
     loadRules();
-    loadBranches();
   }, []);
 
   useEffect(() => {
-    if (!selectedBranch || selectedBranch === "All") {
+    if (!selectedBranch || isAllBranch) {
       studentRequestId.current += 1;
       setClasses([]);
       setSections([]);
@@ -238,7 +203,7 @@ const HifzRewards: React.FC = () => {
     setSelectedSection("");
     setStudents([]);
     setSelectedStudentId("");
-  }, [selectedBranch]);
+  }, [selectedBranch, isAllBranch]);
 
   useEffect(() => {
     if (!selectedClass) {
@@ -265,11 +230,11 @@ const HifzRewards: React.FC = () => {
     setSelectedSection("");
     setStudents([]);
     setSelectedStudentId("");
-  }, [selectedClass, selectedBranch]);
+  }, [selectedClass, selectedBranch, isAllBranch]);
 
   useEffect(() => {
     loadStudentRewards();
-  }, [selectedBranch, selectedClass, selectedSection, selectedBranchName]);
+  }, [selectedBranch, selectedClass, selectedSection, isAllBranch]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [event.target.name]: event.target.value });
@@ -335,9 +300,8 @@ const HifzRewards: React.FC = () => {
         class_name: selectedClass,
         section: selectedSection,
       };
-      if (selectedBranch !== "All") {
+      if (!isAllBranch) {
         params.branch = selectedBranch;
-        if (selectedBranchName) params.branch_name = selectedBranchName;
       }
 
       const response = await api.get("/hifz/students", { params });
@@ -368,7 +332,7 @@ const HifzRewards: React.FC = () => {
       setLoadingStudents(false);
       setSelectedStudentId("");
     }
-  }, [selectedBranch, selectedClass, selectedSection, selectedBranchName]);
+  }, [selectedBranch, selectedClass, selectedSection, isAllBranch]);
 
   const paraRules = useMemo(
     () => rules.filter((rule) => String(rule.para_number) === selectedPara),
@@ -717,24 +681,12 @@ const HifzRewards: React.FC = () => {
             <div className="grid grid-cols-1 gap-4 border-b border-slate-100 p-5 md:grid-cols-3">
               <label className="text-sm font-medium text-slate-700">
                 Branch
-                <select
-                  value={selectedBranch}
-                  onChange={(event) => {
-                    setSelectedBranch(event.target.value);
-                    setSelectedStudentId("");
-                  }}
-                  className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5"
-                  required
-                >
-                  {branches.map((branch) => (
-                    <option
-                      key={branch.branch_code || branch.branch_name}
-                      value={branch.branch_code || branch.branch_name}
-                    >
-                      {branch.branch_name}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  value={branchDisplayName}
+                  readOnly
+                  aria-readonly="true"
+                  className="mt-1 block w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-600"
+                />
               </label>
               <label className="text-sm font-medium text-slate-700">
                 Class
@@ -893,7 +845,7 @@ const HifzRewards: React.FC = () => {
                 </div>
                 <h2 className="text-2xl font-bold">Student Reward Dashboard</h2>
                 <p className="mt-1 text-sm text-emerald-100">
-                  Track prize wins and reward amounts across branches, classes, and Paras.
+                  Track prize wins and reward amounts for the branch selected in the header.
                 </p>
               </div>
               <button
@@ -909,24 +861,12 @@ const HifzRewards: React.FC = () => {
             <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-white p-5 md:grid-cols-3">
             <label className="text-sm font-medium text-slate-700">
               Branch
-              <select
-                value={selectedBranch}
-                onChange={(event) => {
-                  setSelectedBranch(event.target.value);
-                  setSelectedStudentId("");
-                }}
-                className="mt-1 block w-full rounded-lg border px-3 py-2"
-              >
-                {canSelectAllBranches && <option value="All">All Branches</option>}
-                {branches.map((branch) => (
-                  <option
-                    key={branch.branch_code || branch.branch_name}
-                    value={branch.branch_code || branch.branch_name}
-                  >
-                    {branch.branch_name}
-                  </option>
-                ))}
-              </select>
+              <input
+                value={branchDisplayName}
+                readOnly
+                aria-readonly="true"
+                className="mt-1 block w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600"
+              />
             </label>
             <label className="text-sm font-medium text-slate-700">
               Class
